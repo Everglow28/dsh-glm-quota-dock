@@ -1,0 +1,6 @@
+- insert:
+    - id: glm-quota-dock
+      name: 'dsh-glm-quota-dock'
+      config:
+        endpoint: https://open.bigmodel.cn
+        minIntervalSec: 60
