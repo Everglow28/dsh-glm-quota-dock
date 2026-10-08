@@ -1,5 +1,8 @@
 # dsh-glm-quota-dock
 
+[![GitHub Release](https://img.shields.io/github/v/release/Everglow28/dsh-glm-quota-dock?display_name=tag&sort=semver&color=1f6feb)](https://github.com/Everglow28/dsh-glm-quota-dock/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-2da44e)](LICENSE)
+
 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 插件:在会话输入框下方的统计行内,常驻一个 **GLM Coding Plan 额度 pill**,实时显示各窗口用量百分比。
 
 A lightweight DeepSeek Harness plugin that shows your GLM Coding Plan quota as an always-visible pill in the composer stats row.
