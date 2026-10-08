@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "type": "module",
   "description": "Shows GLM Coding Plan quota usage next to the session stats row.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Everglow28/dsh-glm-quota-dock.git"
+  },
   "icon": "./icon.svg",
   "exports": {
     ".": "./index.js",
