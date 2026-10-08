@@ -8,6 +8,15 @@ A lightweight DeepSeek Harness plugin that shows your GLM Coding Plan quota as a
 ◔ GLM 5h 9% · 周 45% · 工具 7%
 ```
 
+## 截图
+
+| 统计行 pill | 点击弹出的详情面板 |
+| :---: | :---: |
+| ![pill 正常(45%,绿色)](docs/images/pill-45.png) | ![详情面板 正常(45%)](docs/images/panel-45.png) |
+| ![pill 告警(99%,红色)](docs/images/pill-99.png) | ![详情面板 告警(99%)](docs/images/panel-99.png) |
+
+> 上:5 小时窗口 45% 时 pill 与各限额独立着色;下:99% 时 pill 与对应进度条转为红色告警。详情面板含逐条限额、重置时间、近 24 小时按模型用量与套餐档位。
+
 ## 特性
 
 - **实时额度**:输入框统计行内常驻 pill,30 秒轮询;每个窗口(5 小时 Token / 周额度 / 工具月度额度)独立着色 —— <80% 绿、≥80% 黄、≥95% 红
