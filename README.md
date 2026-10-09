@@ -37,19 +37,26 @@ A lightweight DeepSeek Harness plugin that shows your GLM Coding Plan quota as a
 
 ## 安装
 
+插件零构建、零依赖,直接从 GitHub 仓库安装即可。
+
 **方式 A:让 DSH 会话里的 Agent 安装**(推荐,任何 profile 通用)
 
-把这个目录交给 Agent,说"用 plugin_manager install_bundle 安装这个目录"即可。
+把仓库地址交给 DSH 会话里的 Agent:
 
-**方式 B:`dsh` CLI**
+> 请用 plugin_manager 的 install_bundle 安装 https://github.com/Everglow28/dsh-glm-quota-dock
+
+Agent 会克隆仓库并把 bundle 装进当前 profile,安装成功后按提示**重启 DSH + 刷新网页**即可。
+
+**方式 B:`dsh` CLI + git clone**
 
 ```bash
-dsh plugin --profile <你的profile> add <本目录的绝对路径>
+git clone https://github.com/Everglow28/dsh-glm-quota-dock.git
+dsh plugin --profile <你的profile> add <克隆目录的绝对路径>
 ```
 
 **方式 C:手动**
 
-把目录复制/链接到 `~/.dsh/profiles/<profile>/node_modules/`,并在该 profile 的 `cordis.patch.yml` 追加:
+把仓库克隆/复制到 `~/.dsh/profiles/<profile>/node_modules/dsh-glm-quota-dock/`,并在该 profile 的 `cordis.patch.yml` 追加:
 
 ```yaml
 - insert:
