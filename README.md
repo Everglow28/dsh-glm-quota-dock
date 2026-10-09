@@ -38,6 +38,9 @@ A lightweight DeepSeek Harness plugin that shows your GLM Coding Plan quota as a
 - DeepSeek Harness(Desktop 或 `dsh web`,建议较新版本)
 - 已在 DSH 模型页配置 GLM Coding Plan 供应商(如 `zai-coding-cn`),其 API Key 会通过凭据引用自动解析(默认 `ZAI_CODING_CN_API_KEY`)
 
+> [!NOTE]
+> 作者仅在 **Lite 档(历史版本 V1:5 小时窗口 + 月度工具额度)** 上实际验证过。V2(含周窗口)与新版积分制是按官方响应字段做的适配,逻辑上兼容但未经真机验证;如显示异常,欢迎提 issue 附上返回结构。
+
 ## 安装
 
 插件零构建、零依赖,直接从 GitHub 仓库安装即可。
