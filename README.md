@@ -1,6 +1,7 @@
 # dsh-glm-quota-dock
 
 [![GitHub Release](https://img.shields.io/github/v/release/Everglow28/dsh-glm-quota-dock?display_name=tag&sort=semver&color=1f6feb)](https://github.com/Everglow28/dsh-glm-quota-dock/releases/latest)
+[![npm](https://img.shields.io/npm/v/dsh-glm-quota-dock?color=cb3837&logo=npm)](https://www.npmjs.com/package/dsh-glm-quota-dock)
 [![Last Commit](https://img.shields.io/github/last-commit/Everglow28/dsh-glm-quota-dock/main?color=8250df)](https://github.com/Everglow28/dsh-glm-quota-dock/commits/main)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2da44e)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-DeepSeek%20Harness-1f6feb)
@@ -43,9 +44,15 @@ A lightweight DeepSeek Harness plugin that shows your GLM Coding Plan quota as a
 
 ## 安装
 
-插件零构建、零依赖,直接从 GitHub 仓库安装即可。
+插件零构建、零依赖,已发布到 npm,最简单的安装只需一条命令。
 
-**方式 A:让 DSH 会话里的 Agent 安装**(推荐,任何 profile 通用)
+**方式 A:npm(推荐)**
+
+```bash
+dsh plugin --profile <你的profile> add dsh-glm-quota-dock
+```
+
+**方式 B:让 DSH 会话里的 Agent 安装**(任何 profile 通用)
 
 把仓库地址交给 DSH 会话里的 Agent:
 
@@ -53,14 +60,14 @@ A lightweight DeepSeek Harness plugin that shows your GLM Coding Plan quota as a
 
 Agent 会克隆仓库并把 bundle 装进当前 profile,安装成功后按提示**重启 DSH + 刷新网页**即可。
 
-**方式 B:`dsh` CLI + git clone**
+**方式 C:`dsh` CLI + git clone**
 
 ```bash
 git clone https://github.com/Everglow28/dsh-glm-quota-dock.git
 dsh plugin --profile <你的profile> add <克隆目录的绝对路径>
 ```
 
-**方式 C:手动**
+**方式 D:手动**
 
 把仓库克隆/复制到 `~/.dsh/profiles/<profile>/node_modules/dsh-glm-quota-dock/`,并在该 profile 的 `cordis.patch.yml` 追加:
 
