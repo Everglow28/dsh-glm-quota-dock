@@ -36,6 +36,8 @@ window.__ModuleLoader__.load({
         usageDetail: '用量明细',
         usage24h: '近 24 小时 Token',
         calls: '次调用',
+        usagePage: '在浏览器中打开用量页',
+        planTipSuffix: '。当前档位:',
         seg5h: '5h',
         segWeek: '周',
         segTool: '工具',
@@ -61,6 +63,8 @@ window.__ModuleLoader__.load({
         usageDetail: 'Usage detail',
         usage24h: 'Tokens (last 24h)',
         calls: 'calls',
+        usagePage: 'Open usage page in browser',
+        planTipSuffix: '. Current tier: ',
         seg5h: '5h',
         segWeek: 'wk',
         segTool: 'tool',
@@ -78,19 +82,32 @@ window.__ModuleLoader__.load({
       ".glmq-mark{display:inline-flex;align-items:center;color:var(--dsw-alias-brand-primary)}",
       ".glmq-mark svg{display:block}",
       ".glmq-pct{color:var(--glmq-state,var(--dsw-alias-label-secondary));font-weight:600}",
-      ".glmq-panel{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);z-index:30;width:264px;box-sizing:border-box;background:var(--dsw-alias-bg-overlay);border:0.5px solid var(--dsw-alias-border-l1);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.16);padding:12px;display:flex;flex-direction:column;gap:10px;text-align:left}",
-      ".glmq-panel-head{display:flex;align-items:center;gap:6px;color:var(--dsw-alias-label-secondary);font-size:12px;font-weight:600}",
-      ".glmq-panel-head svg{flex:none;width:13px;height:13px;color:var(--dsw-alias-brand-primary)}",
+      ".glmq-panel{position:absolute;bottom:calc(100% + 10px);left:50%;transform:translateX(-50%);z-index:30;width:272px;box-sizing:border-box;background:var(--dsw-alias-bg-overlay);border:0.5px solid var(--dsw-alias-border-l1);border-radius:14px;box-shadow:0 4px 16px rgba(0,0,0,.10),0 12px 40px rgba(0,0,0,.12);padding:14px;display:flex;flex-direction:column;gap:12px;text-align:left}",
+      ".glmq-panel-head{display:flex;align-items:center;gap:7px;color:var(--dsw-alias-label-primary);font-size:12.5px;font-weight:600}",
+      ".glmq-panel-head svg{flex:none;width:15px;height:15px;color:var(--dsw-alias-brand-primary)}",
       ".glmq-refresh{margin-left:auto;border:none;background:0 0;color:var(--dsw-alias-label-tertiary);cursor:pointer;padding:2px;border-radius:6px;display:inline-flex}",
       ".glmq-refresh:hover{color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover)}",
       ".glmq-refresh svg{width:13px;height:13px}",
+      ".glmq-extlink{margin-left:auto;border:none;background:0 0;color:var(--dsw-alias-label-tertiary);cursor:pointer;padding:2px;border-radius:6px;display:inline-flex;text-decoration:none}",
+      ".glmq-extlink:hover{color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover)}",
+      ".glmq-extlink svg{width:13px;height:13px}",
+      ".glmq-spacer{flex:1}",
+      ".glmq-plan-tag{cursor:help;position:relative;font-size:10px;font-weight:600;color:var(--dsw-alias-brand-primary);background:color-mix(in srgb,var(--dsw-alias-brand-primary) 10%,transparent);border-radius:999px;padding:1px 7px;letter-spacing:.02em;font-weight:600}",
+      ".glmq-plan-tag::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%) translateY(2px);width:max-content;max-width:224px;box-sizing:border-box;background:var(--dsw-alias-bg-overlay);color:var(--dsw-alias-label-secondary);border:0.5px solid var(--dsw-alias-border-l1);border-radius:9px;box-shadow:0 4px 16px rgba(0,0,0,.10),0 12px 40px rgba(0,0,0,.12);padding:8px 10px;font-size:11px;font-weight:400;line-height:1.65;text-align:left;letter-spacing:normal;white-space:normal;opacity:0;pointer-events:none;transition:opacity .15s ease,transform .15s ease;z-index:40}",
+      ".glmq-plan-tag:hover::after{opacity:1;transform:translateX(-50%) translateY(0)}",
       ".glmq-limit{display:flex;flex-direction:column;gap:4px}",
       ".glmq-limit-row{display:flex;align-items:baseline;gap:6px;font-size:12px;color:var(--dsw-alias-label-secondary)}",
       ".glmq-limit-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
       ".glmq-limit-value{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-primary);font-weight:600}",
-      ".glmq-bar{height:4px;border-radius:999px;background:var(--dsw-alias-border-l1);overflow:hidden}",
+      ".glmq-bar{height:3px;border-radius:999px;background:var(--dsw-alias-border-l1);overflow:hidden}",
       ".glmq-bar-fill{height:100%;border-radius:999px;background:var(--glmq-state,var(--dsw-alias-state-success-primary));transition:width .2s ease}",
-      ".glmq-meta{font-size:11px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums}",
+      ".glmq-meta{font-size:10.5px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums}",
+      ".glmq-reset{display:inline-flex;align-items:center;gap:4px;color:var(--glmq-state,var(--dsw-alias-label-tertiary))}",
+      ".glmq-reset svg{width:11px;height:11px;flex:none}",
+      ".glmq-reset .glmq-hhmm{font-variant-numeric:tabular-nums}",
+      ".glmq-limit-reset{display:inline-flex;align-items:center;gap:3px;color:var(--glmq-state,var(--dsw-alias-state-success-primary));opacity:.8}",
+      ".glmq-limit-reset svg{width:9px;height:9px;flex:none}",
+      ".glmq-panel-foot{display:flex;align-items:center;gap:6px;border-top:0.5px solid var(--dsw-alias-border-l1);padding-top:10px;font-size:10.5px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums}",
       ".glmq-info{cursor:help;margin-left:4px;color:var(--dsw-alias-label-tertiary)}",
       ".glmq-info:hover{color:var(--dsw-alias-label-secondary)}",
       ".glmq-seg{display:inline-flex;align-items:center;gap:3px}",
@@ -99,7 +116,7 @@ window.__ModuleLoader__.load({
       ".glmq-detail{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--dsw-alias-label-tertiary)}",
       ".glmq-detail li{display:flex;gap:6px}",
       ".glmq-detail .glmq-detail-usage{margin-left:auto;font-variant-numeric:tabular-nums}",
-      "@media (prefers-reduced-motion:reduce){.glmq-bar-fill{transition:none}}",
+      "@media (prefers-reduced-motion:reduce){.glmq-bar-fill{transition:none}.glmq-plan-tag::after{transition:none}}",
     ].join("");
 
     const MARK_ICON = h('svg', { viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true },
@@ -109,6 +126,16 @@ window.__ModuleLoader__.load({
     const REFRESH_ICON = h('svg', { viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true },
       h('path', { d: 'M13.3 6.7A5.4 5.4 0 1 0 13.9 9.4', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' }),
       h('path', { d: 'M13.5 2.5v4h-4', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' }));
+
+    const CLOCK_ICON = h('svg', { viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true },
+      h('circle', { cx: 8, cy: 8, r: 6, stroke: 'currentColor', strokeWidth: 1.5 }),
+      h('path', { d: 'M8 4.8V8l2.2 1.4', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round' }));
+
+    const EXTLINK_ICON = h('svg', { viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true },
+      h('path', { d: 'M6.5 3.5H4a1.5 1.5 0 0 0-1.5 1.5v7A1.5 1.5 0 0 0 4 13.5h7a1.5 1.5 0 0 0 1.5-1.5V9.5', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round' }),
+      h('path', { d: 'M9.5 2.5h4v4M13.2 2.8 7.8 8.2', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' }));
+
+    const USAGE_PAGE_URL = 'https://bigmodel.cn/coding-plan/personal/usage';
 
     function stateColor(pct) {
       if (pct >= 95) return 'var(--dsw-alias-state-error-primary)';
@@ -142,7 +169,7 @@ window.__ModuleLoader__.load({
         const hours = Math.floor(deltaMin / 60);
         countdown = hours < 24 ? `${hours}h ${deltaMin % 60}m` : `${Math.floor(hours / 24)}d ${hours % 24}h`;
       }
-      return { label, title: `${t('resetIn')} · ${countdown}` };
+      return { label, countdown, title: `${t('resetIn')} · ${countdown}` };
     }
 
     /**
@@ -221,18 +248,29 @@ window.__ModuleLoader__.load({
       return [state, (force) => { if (tickRef.current) tickRef.current(force); }];
     }
 
-    function LimitRow({ limit, t }) {
+    function LimitRow({ limit, t, isPrimary }) {
       const pct = Math.max(0, Math.min(100, Math.round(Number(limit.percentage) || 0)));
       const info = limitInfo(limit, t);
       const reset = resetInfo(limit.nextResetTime, t);
       const children = [
         h('div', { className: 'glmq-limit-row', key: 'row' },
           h('span', { className: 'glmq-limit-label' }, info.label),
-          reset ? h('span', { className: 'glmq-meta', title: reset.title }, `${t('resetIn')} ${reset.label}`) : null,
+          // Weekly/monthly/tool windows reset on a fixed schedule: the reset
+          // moment sits inline with the label. The 5h window is the only one
+          // users count down to, so it keeps its own meta line under the bar.
+          !isPrimary && reset
+            ? h('span', { className: 'glmq-limit-reset', title: reset.title }, reset.label, ' ', t('resetIn'))
+            : null,
           h('span', { className: 'glmq-limit-value', style: { color: stateColor(pct) } }, pct + '%')),
         h('div', { className: 'glmq-bar', key: 'bar' },
           h('div', { className: 'glmq-bar-fill', style: { width: pct + '%', '--glmq-state': stateColor(pct) } })),
       ];
+      if (isPrimary && reset) {
+        children.push(h('div', { className: 'glmq-meta', key: 'meta' },
+          h('span', { className: 'glmq-limit-reset' },
+            CLOCK_ICON,
+            h('span', null, `${reset.countdown} ${t('resetIn')} · ${reset.label}`))));
+      }
       if (Array.isArray(limit.usageDetails) && limit.usageDetails.length > 0) {
         children.push(h('ul', { className: 'glmq-detail', key: 'detail' },
           limit.usageDetails.map((entry, index) => h('li', { key: entry.modelCode || String(index) },
@@ -323,6 +361,11 @@ window.__ModuleLoader__.load({
         ];
       } else {
         const suffix = state.stale ? '*' : '';
+        // Variant A: the 5h window's reset countdown joins the pill as a muted
+        // trailing segment, tinted with the 5h window's state color.
+        const primary = segments[0];
+        const primaryPct = Math.max(0, Math.min(100, Math.round(Number(primary.limit.percentage) || 0)));
+        const primaryReset = resetInfo(primary.limit.nextResetTime, t);
         pillContent = [
           h('span', { key: 'name' }, 'GLM'),
           ...segments.map((seg, index) => {
@@ -332,6 +375,13 @@ window.__ModuleLoader__.load({
               h('span', { className: 'glmq-pct', style: { '--glmq-state': stateColor(pct) } }, pct + '%'),
               index < segments.length - 1 ? h('span', { className: 'glmq-sep' }, '·') : null);
           }),
+          primaryReset
+            ? h('span', { key: 'reset', className: 'glmq-seg', title: `${limitInfo(primary.limit, t).label} · ${primaryReset.title}` },
+              h('span', { className: 'glmq-sep' }, '·'),
+              h('span', { className: 'glmq-reset', style: { '--glmq-state': stateColor(primaryPct) } },
+                CLOCK_ICON,
+                h('span', { className: 'glmq-hhmm' }, primaryReset.countdown)))
+            : null,
           suffix ? h('span', { key: 'suffix', className: 'glmq-pct' }, suffix) : null,
         ];
       }
@@ -347,9 +397,32 @@ window.__ModuleLoader__.load({
           h('div', { className: 'glmq-panel-head' },
             MARK_ICON,
             h('span', null, 'GLM Coding Plan'),
+            state.phase === 'ok' && state.quota && state.quota.level
+              ? (() => {
+                const rawLevel = String(state.quota.level).trim();
+                const tierMatch = rawLevel.match(/lite|pro|max/i);
+                const tier = tierMatch ? tierMatch[0][0].toUpperCase() + tierMatch[0].slice(1).toLowerCase() : rawLevel;
+                const desc = planInfo(state.quota, t);
+                const tip = (desc ? desc + t('planTipSuffix') : '') + tier;
+                return h('span', { className: 'glmq-plan-tag', 'data-tip': tip }, tier);
+              })()
+              : null,
+            h('span', { className: 'glmq-spacer' }),
+            h('a', {
+              className: 'glmq-extlink',
+              href: USAGE_PAGE_URL,
+              target: '_blank',
+              rel: 'noopener',
+              title: t('usagePage'),
+              'aria-label': t('usagePage'),
+            }, EXTLINK_ICON),
             h('button', { className: 'glmq-refresh', title: t('refresh'), 'aria-label': t('refresh'), onClick: () => refresh(true) }, REFRESH_ICON)),
           limits.length > 0
-            ? limits.map((limit) => h(LimitRow, { key: limit.type, limit, t }))
+            ? limits.map((limit) => h(LimitRow, {
+              key: limit.type, limit, t,
+              // the 5h token window is the primary (countdown) row
+              isPrimary: typeOf(limit).includes('TOKEN') && Number(limit.unit) === 3,
+            }))
             : h('div', { className: 'glmq-meta' }, state.phase === 'error' ? t('error') : t('loading')),
           (() => {
             const total = state.modelUsage && state.modelUsage.totalUsage;
@@ -365,16 +438,16 @@ window.__ModuleLoader__.load({
                   h('span', { className: 'glmq-detail-usage' }, fmtCompact(model.totalTokens, loc))))) : null,
               h('div', { className: 'glmq-meta' }, `${total.totalModelCallCount ?? 0} ${t('calls')}`));
           })(),
-          state.phase === 'ok' && state.quota && state.quota.level
-            ? (() => {
-              const desc = planInfo(state.quota, t);
-              return h('div', { className: 'glmq-meta' },
-                'plan: ' + state.quota.level,
-                desc ? h('span', { className: 'glmq-info', title: desc }, 'ⓘ') : null);
-            })()
-            : null,
           state.phase === 'ok' && state.fetchedAt
-            ? h('div', { className: 'glmq-meta' }, `${state.stale ? t('stale') + ' · ' : ''}${t('cachedPrefix')} ${new Date(state.fetchedAt).toLocaleTimeString()}`)
+            ? (() => {
+              const model = selectionNow ? String(selectionNow.model || '') : '';
+              const cached = `${state.stale ? t('stale') + ' · ' : ''}${t('cachedPrefix')} ${new Date(state.fetchedAt).toLocaleTimeString()}`;
+              const total = state.modelUsage && state.modelUsage.totalUsage;
+              return h('div', { className: 'glmq-panel-foot' },
+                h('span', null, [model, cached].filter(Boolean).join(' · ')),
+                h('span', { className: 'glmq-spacer' }),
+                total ? h('span', null, `${t('usage24h')} ${fmtCompact(total.totalTokensUsage, loc)}`) : null);
+            })()
             : null));
     }
 
