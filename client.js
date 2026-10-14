@@ -17,6 +17,14 @@ window.__ModuleLoader__.load({
     const IDLE_AFTER_MS = 5 * 60_000;  // no key/pointer/wheel input for 5 min → idle
     const IDLE_POLL_MS = 5 * 60_000;   // idle re-poll cadence
 
+    // This plugin's own version (kept in sync with package.json by hand; the
+    // client bundle cannot read package.json at runtime). Shown as muted "v"
+    // text in the panel footer — deliberately unlike the plan-tier badge.
+    const PLUGIN_VERSION = '1.3.0';
+    const NPM_PACKAGE = 'dsh-glm-quota-dock';
+    const UPDATE_CHECK_MS = 60 * 60_000; // re-check npm for a newer release hourly
+    let updateCheck = { at: 0, latest: null }; // module-level: shared across mounts
+
     const DICTS = {
       zh: {
         planLabel: '额度',
@@ -39,6 +47,13 @@ window.__ModuleLoader__.load({
         usage24h: '近 24 小时 Token',
         calls: '次调用',
         usagePage: '在浏览器中打开用量页',
+        newVersion: '可更新',
+        confirmUpdate: '更新插件到 {v}?',
+        cancel: '取消',
+        confirm: '更新',
+        updating: '更新中…',
+        updateFailed: '更新失败',
+        updateDone: '已更新,刷新页面',
         absUsage: '已用 {a}/{b} · 剩余 {c}',
         sparkTip: '{range} · 峰值 {peak} token · {calls} 次调用',
         planTipSuffix: '。当前档位:',
@@ -70,6 +85,13 @@ window.__ModuleLoader__.load({
         usage24h: 'Tokens (last 24h)',
         calls: 'calls',
         usagePage: 'Open usage page in browser',
+        newVersion: 'Update',
+        confirmUpdate: 'Update plugin to {v}?',
+        cancel: 'Cancel',
+        confirm: 'Update',
+        updating: 'Updating…',
+        updateFailed: 'Update failed',
+        updateDone: 'Updated, reloading',
         absUsage: '{a}/{b} used · {c} left',
         sparkTip: '{range} · peak {peak} tokens · {calls} calls',
         planTipSuffix: '. Current tier: ',
@@ -90,7 +112,7 @@ window.__ModuleLoader__.load({
       ".glmq-mark{display:inline-flex;align-items:center;color:var(--dsw-alias-brand-primary)}",
       ".glmq-mark svg{display:block}",
       ".glmq-pct{color:var(--glmq-state,var(--dsw-alias-label-secondary));font-weight:600}",
-      ".glmq-panel{position:absolute;bottom:calc(100% + 10px);left:50%;transform:translateX(-50%);z-index:30;width:320px;box-sizing:border-box;background:var(--dsw-alias-bg-overlay);border:0.5px solid var(--dsw-alias-border-l1);border-radius:14px;box-shadow:0 4px 16px rgba(0,0,0,.10),0 12px 40px rgba(0,0,0,.12);padding:14px;display:flex;flex-direction:column;gap:12px;text-align:left}",
+      ".glmq-panel{position:absolute;bottom:calc(100% + 10px);left:50%;transform:translateX(-50%);z-index:30;width:360px;box-sizing:border-box;background:var(--dsw-alias-bg-overlay);border:0.5px solid var(--dsw-alias-border-l1);border-radius:14px;box-shadow:0 4px 16px rgba(0,0,0,.10),0 12px 40px rgba(0,0,0,.12);padding:14px;display:flex;flex-direction:column;gap:12px;text-align:left}",
       ".glmq-panel-head{display:flex;align-items:center;gap:7px;color:var(--dsw-alias-label-primary);font-size:12.5px;font-weight:600}",
       ".glmq-panel-head svg{flex:none;width:15px;height:15px;color:var(--dsw-alias-brand-primary)}",
       ".glmq-refresh{margin-left:auto;border:none;background:0 0;color:var(--dsw-alias-label-tertiary);cursor:pointer;padding:2px;border-radius:6px;display:inline-flex}",
@@ -120,7 +142,22 @@ window.__ModuleLoader__.load({
       ".glmq-reset .glmq-hhmm{font-variant-numeric:tabular-nums}",
       ".glmq-limit-reset{display:inline-flex;align-items:center;gap:3px;color:var(--glmq-state,var(--dsw-alias-state-success-primary));opacity:.8}",
       ".glmq-limit-reset svg{width:9px;height:9px;flex:none}",
-      ".glmq-panel-foot{display:flex;align-items:center;gap:6px;border-top:0.5px solid var(--dsw-alias-border-l1);padding-top:10px;font-size:10.5px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums}",
+      ".glmq-panel-foot{display:flex;align-items:center;gap:6px;white-space:nowrap;border-top:0.5px solid var(--dsw-alias-border-l1);padding-top:10px;font-size:10.5px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums}",
+      ".glmq-panel-foot>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis}",
+      ".glmq-ver{flex:none;color:var(--dsw-alias-label-tertiary)}",
+      ".glmq-upd{flex:none;border:none;background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 12%,transparent);padding:1px 8px;border-radius:999px;font:inherit;font-size:10px;font-weight:600;color:var(--dsw-alias-state-success-primary);cursor:pointer;text-decoration:none}",
+      ".glmq-upd:hover{background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 22%,transparent)}",
+      ".glmq-upd-busy{opacity:.6;pointer-events:none}",
+      ".glmq-upd-fail{color:var(--dsw-alias-state-warn-primary);background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 12%,transparent)}",
+      ".glmq-upd-wrap{position:relative;flex:none;display:inline-flex}",
+      ".glmq-confirm{position:absolute;bottom:calc(100% + 10px);right:0;z-index:40;width:216px;box-sizing:border-box;background:var(--dsw-alias-bg-overlay);border:0.5px solid var(--dsw-alias-border-l1);border-radius:11px;box-shadow:0 4px 16px rgba(0,0,0,.10),0 12px 40px rgba(0,0,0,.12);padding:11px 12px;text-align:left;white-space:normal}",
+      ".glmq-confirm-text{font-size:11.5px;color:var(--dsw-alias-label-primary);line-height:1.5}",
+      ".glmq-confirm-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:9px}",
+      ".glmq-btn{border:none;border-radius:8px;padding:3px 10px;font:inherit;font-size:11px;font-weight:600;cursor:pointer}",
+      ".glmq-btn-ghost{background:0 0;color:var(--dsw-alias-label-secondary)}",
+      ".glmq-btn-ghost:hover{background:var(--dsw-alias-interactive-bg-hover)}",
+      ".glmq-btn-go{background:var(--dsw-alias-state-success-primary);color:var(--dsw-alias-label-on-accent,#fff)}",
+      ".glmq-btn-go:hover{filter:brightness(1.08)}",
       ".glmq-info{cursor:help;margin-left:4px;color:var(--dsw-alias-label-tertiary)}",
       ".glmq-info:hover{color:var(--dsw-alias-label-secondary)}",
       ".glmq-seg{display:inline-flex;align-items:center;gap:3px}",
@@ -366,6 +403,63 @@ window.__ModuleLoader__.load({
       const [state, refresh] = useQuotaPoll(isGlmSession);
       const [open, setOpen] = React.useState(false);
       const rootRef = React.useRef(null);
+      // quiet update check: at most one registry hit per hour, shared module
+      // cache, failures silently ignored — the footer just stays version-only
+      const [latestVer, setLatestVer] = React.useState(updateCheck.latest);
+      const [updatePhase, setUpdatePhase] = React.useState('idle');
+      const [confirmOpen, setConfirmOpen] = React.useState(false);
+      const updWrapRef = React.useRef(null);
+      React.useEffect(() => {
+        if (!confirmOpen) return undefined;
+        const onKey = (event) => { if (event.key === 'Escape') setConfirmOpen(false); };
+        const onDown = (event) => {
+          if (updWrapRef.current && !updWrapRef.current.contains(event.target)) setConfirmOpen(false);
+        };
+        document.addEventListener('keydown', onKey);
+        document.addEventListener('pointerdown', onDown);
+        return () => {
+          document.removeEventListener('keydown', onKey);
+          document.removeEventListener('pointerdown', onDown);
+        };
+      }, [confirmOpen]);
+      const startUpdate = () => {
+        if (updatePhase === 'running' || updatePhase === 'done') return;
+        setUpdatePhase('running');
+        fetch('/api/glm-quota/update', { method: 'POST' })
+          .then((res) => res.json())
+          .then((json) => {
+            if (json && json.ok) {
+              setUpdatePhase('done');
+              setTimeout(() => window.location.reload(), 1500);
+            } else {
+              setUpdatePhase('failed');
+            }
+          })
+          .catch(() => setUpdatePhase('failed'));
+      };
+      React.useEffect(() => {
+        let alive = true;
+        if (Date.now() - updateCheck.at < UPDATE_CHECK_MS) return undefined;
+        updateCheck.at = Date.now();
+        fetch('https://registry.npmjs.org/' + NPM_PACKAGE + '/latest', { headers: { accept: 'application/json' } })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((json) => {
+            const v = json && typeof json.version === 'string' ? json.version : null;
+            if (alive && v) { updateCheck.latest = v; setLatestVer(v); }
+          })
+          .catch(() => { /* offline / blocked: footer stays version-only */ });
+        return () => { alive = false; };
+      }, []);
+      const isNewer = (candidate, current) => {
+        const a = String(candidate).split('.').map((n) => parseInt(n, 10));
+        const b = String(current).split('.').map((n) => parseInt(n, 10));
+        for (let i = 0; i < 3; i += 1) {
+          if ((a[i] || 0) > (b[i] || 0)) return true;
+          if ((a[i] || 0) < (b[i] || 0)) return false;
+        }
+        return false;
+      };
+      const hasUpdate = latestVer && isNewer(latestVer, PLUGIN_VERSION);
 
       React.useEffect(() => {
         if (!open) return undefined;
@@ -511,13 +605,32 @@ window.__ModuleLoader__.load({
           })(),
           state.phase === 'ok' && state.fetchedAt
             ? (() => {
-              const model = selectionNow ? String(selectionNow.model || '') : '';
               const cached = `${state.stale ? t('stale') + ' · ' : ''}${t('cachedPrefix')} ${new Date(state.fetchedAt).toLocaleTimeString()}`;
-              const total = state.modelUsage && state.modelUsage.totalUsage;
               return h('div', { className: 'glmq-panel-foot' },
-                h('span', null, [model, cached].filter(Boolean).join(' · ')),
+                h('span', null, cached),
                 h('span', { className: 'glmq-spacer' }),
-                total ? h('span', null, `${t('usage24h')} ${fmtCompact(total.totalTokensUsage, loc)}`) : null);
+                hasUpdate
+                  ? h('span', { key: 'upd', className: 'glmq-upd-wrap', ref: updWrapRef },
+                    h('button', {
+                      className: 'glmq-upd' + (updatePhase === 'running' ? ' glmq-upd-busy' : '') + (updatePhase === 'failed' ? ' glmq-upd-fail' : ''),
+                      title: updatePhase === 'failed'
+                        ? String(t('updateFailed'))
+                        : `v${PLUGIN_VERSION} → v${latestVer}`,
+                      onClick: () => { if (updatePhase === 'idle' || updatePhase === 'failed') setConfirmOpen(true); },
+                    }, updatePhase === 'running' ? t('updating')
+                      : updatePhase === 'done' ? t('updateDone')
+                      : updatePhase === 'failed' ? t('updateFailed')
+                      : t('newVersion')),
+                    confirmOpen && updatePhase !== 'running' && updatePhase !== 'done'
+                      ? h('div', { className: 'glmq-confirm', role: 'dialog', 'aria-label': t('confirmUpdate') },
+                        h('div', { className: 'glmq-confirm-text' },
+                          String(t('confirmUpdate') || 'Update to {v}?').replace('{v}', 'v' + latestVer)),
+                        h('div', { className: 'glmq-confirm-actions' },
+                          h('button', { className: 'glmq-btn glmq-btn-ghost', onClick: () => setConfirmOpen(false) }, t('cancel')),
+                          h('button', { className: 'glmq-btn glmq-btn-go', onClick: () => { setConfirmOpen(false); startUpdate(); } }, t('confirm'))))
+                      : null)
+                  : null,
+                h('span', { key: 'ver', className: 'glmq-ver', title: `dsh-glm-quota-dock v${PLUGIN_VERSION}` }, 'v' + PLUGIN_VERSION));
             })()
             : null));
     }

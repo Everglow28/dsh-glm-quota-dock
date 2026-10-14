@@ -11,6 +11,15 @@
 //   Authorization: <裸 key,无 Bearer 前缀>
 //   -> { code: 200, success: true, data: ... }
 
+import { execFile as execFileCb } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import os from "node:os";
+import fs from "node:fs/promises";
+
+const run = promisify(execFileCb);
+
 const DEFAULT_REF = "ZAI_CODING_CN_API_KEY";
 const DEFAULT_ENDPOINT = "https://open.bigmodel.cn";
 const QUOTA_PATH = "/api/monitor/usage/quota/limit";
@@ -18,6 +27,8 @@ const MODEL_USAGE_PATH = "/api/monitor/usage/model-usage";
 const MIN_INTERVAL_MS = 30_000;
 const DEFAULT_INTERVAL_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 20_000;
+const NPM_PACKAGE = "dsh-glm-quota-dock";
+const UPDATE_TIMEOUT_MS = 180_000;
 
 /** 声明依赖顺序:排在这些服务之后激活,保证 ctx.get 一定能取到。 */
 export const inject = ["connection", "credentials"];
@@ -158,5 +169,62 @@ export function apply(ctx, config) {
       });
     },
   });
-  return dispose;
+
+  // 自更新:POST /api/glm-quota/update 在 profile 目录执行 pnpm 升级本包,
+  // 返回安装到的新版本。仅前端资源刷新页面即可生效;Host 半部的变更仍需
+  // 重启 DSH。pnpm 解析顺序:环境变量 → DSH 桌面运行时内置 → PATH。
+  const disposeUpdate = connection.fetch.register({
+    path: "/api/glm-quota/update",
+    methods: ["POST"],
+    requestBody: "buffered",
+    fetch: async () => {
+      if (updateInflight) return json({ ok: false, error: "update already in progress" }, 409);
+      updateInflight = runSelfUpdate().finally(() => { updateInflight = null; });
+      return updateInflight;
+    },
+  });
+  return [dispose, disposeUpdate];
+}
+
+let updateInflight = null;
+
+function json(payload, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+  });
+}
+
+/** 本包安装位置倒推 profile 目录(node_modules/dsh-glm-quota-dock/ → profile)。 */
+function profileDir() {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  return path.resolve(here, "..", "..");
+}
+
+function pnpmCandidates() {
+  const list = [];
+  if (process.env.PNPM_PATH) list.push([process.execPath, process.env.PNPM_PATH]);
+  list.push([
+    process.execPath,
+    path.join(os.homedir(), ".dsh", "dsh-runtimes", "dsh-primary-runtime", "dependencies", "pnpm", "bin", "pnpm.mjs"),
+  ]);
+  list.push(["pnpm"]);
+  return list;
+}
+
+async function runSelfUpdate() {
+  const dir = profileDir();
+  const args = ["update", NPM_PACKAGE, "--latest", "--config.minimum-release-age=0"];
+  let lastError = "no pnpm candidate worked";
+  for (const [cmd, ...cmdArgs] of pnpmCandidates()) {
+    try {
+      await run(cmd, [...cmdArgs, ...args], { cwd: dir, timeout: UPDATE_TIMEOUT_MS, windowsHide: true });
+      const pkgFile = path.join(dir, "node_modules", NPM_PACKAGE, "package.json");
+      const version = JSON.parse(await fs.readFile(pkgFile, "utf8")).version;
+      return json({ ok: true, version });
+    } catch (error) {
+      lastError = String(error?.message || error);
+    }
+  }
+  return json({ ok: false, error: lastError }, 500);
 }
