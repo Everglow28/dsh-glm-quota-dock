@@ -1,6 +1,6 @@
 {
   "name": "dsh-glm-quota-dock",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "type": "module",
   "description": "Shows GLM Coding Plan quota usage and the 5-hour window reset countdown next to the session stats row.",
   "repository": {

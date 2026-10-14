@@ -25,9 +25,11 @@ window.__ModuleLoader__.load({
         creditsBase: '积分额度',
         unitHour: '小时',
         unitWeek: '周',
-        unitMonth: '个月',
+        unitMonth: '月',
         unitDay: '天',
         resetIn: '重置',
+        countdownMeta: '{d}后重置 · {t}',
+        today: '今日',
         refresh: '刷新',
         loading: '读取中…',
         error: '额度获取失败',
@@ -37,6 +39,8 @@ window.__ModuleLoader__.load({
         usage24h: '近 24 小时 Token',
         calls: '次调用',
         usagePage: '在浏览器中打开用量页',
+        absUsage: '已用 {a}/{b} · 剩余 {c}',
+        sparkTip: '{range} · 峰值 {peak} token · {calls} 次调用',
         planTipSuffix: '。当前档位:',
         seg5h: '5h',
         segWeek: '周',
@@ -55,6 +59,8 @@ window.__ModuleLoader__.load({
         unitMonth: 'mo',
         unitDay: 'd',
         resetIn: 'resets',
+        countdownMeta: 'resets in {d} · {t}',
+        today: '',
         refresh: 'Refresh',
         loading: 'Loading…',
         error: 'Quota unavailable',
@@ -64,6 +70,8 @@ window.__ModuleLoader__.load({
         usage24h: 'Tokens (last 24h)',
         calls: 'calls',
         usagePage: 'Open usage page in browser',
+        absUsage: '{a}/{b} used · {c} left',
+        sparkTip: '{range} · peak {peak} tokens · {calls} calls',
         planTipSuffix: '. Current tier: ',
         seg5h: '5h',
         segWeek: 'wk',
@@ -82,7 +90,7 @@ window.__ModuleLoader__.load({
       ".glmq-mark{display:inline-flex;align-items:center;color:var(--dsw-alias-brand-primary)}",
       ".glmq-mark svg{display:block}",
       ".glmq-pct{color:var(--glmq-state,var(--dsw-alias-label-secondary));font-weight:600}",
-      ".glmq-panel{position:absolute;bottom:calc(100% + 10px);left:50%;transform:translateX(-50%);z-index:30;width:272px;box-sizing:border-box;background:var(--dsw-alias-bg-overlay);border:0.5px solid var(--dsw-alias-border-l1);border-radius:14px;box-shadow:0 4px 16px rgba(0,0,0,.10),0 12px 40px rgba(0,0,0,.12);padding:14px;display:flex;flex-direction:column;gap:12px;text-align:left}",
+      ".glmq-panel{position:absolute;bottom:calc(100% + 10px);left:50%;transform:translateX(-50%);z-index:30;width:320px;box-sizing:border-box;background:var(--dsw-alias-bg-overlay);border:0.5px solid var(--dsw-alias-border-l1);border-radius:14px;box-shadow:0 4px 16px rgba(0,0,0,.10),0 12px 40px rgba(0,0,0,.12);padding:14px;display:flex;flex-direction:column;gap:12px;text-align:left}",
       ".glmq-panel-head{display:flex;align-items:center;gap:7px;color:var(--dsw-alias-label-primary);font-size:12.5px;font-weight:600}",
       ".glmq-panel-head svg{flex:none;width:15px;height:15px;color:var(--dsw-alias-brand-primary)}",
       ".glmq-refresh{margin-left:auto;border:none;background:0 0;color:var(--dsw-alias-label-tertiary);cursor:pointer;padding:2px;border-radius:6px;display:inline-flex}",
@@ -95,11 +103,16 @@ window.__ModuleLoader__.load({
       ".glmq-plan-tag{cursor:help;position:relative;font-size:10px;font-weight:600;color:var(--dsw-alias-brand-primary);background:color-mix(in srgb,var(--dsw-alias-brand-primary) 10%,transparent);border-radius:999px;padding:1px 7px;letter-spacing:.02em;font-weight:600}",
       ".glmq-plan-tag::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%) translateY(2px);width:max-content;max-width:224px;box-sizing:border-box;background:var(--dsw-alias-bg-overlay);color:var(--dsw-alias-label-secondary);border:0.5px solid var(--dsw-alias-border-l1);border-radius:9px;box-shadow:0 4px 16px rgba(0,0,0,.10),0 12px 40px rgba(0,0,0,.12);padding:8px 10px;font-size:11px;font-weight:400;line-height:1.65;text-align:left;letter-spacing:normal;white-space:normal;opacity:0;pointer-events:none;transition:opacity .15s ease,transform .15s ease;z-index:40}",
       ".glmq-plan-tag:hover::after{opacity:1;transform:translateX(-50%) translateY(0)}",
-      ".glmq-limit{display:flex;flex-direction:column;gap:4px}",
+      ".glmq-cards{display:grid;grid-template-columns:1fr 1fr;gap:8px}",
       ".glmq-limit-row{display:flex;align-items:baseline;gap:6px;font-size:12px;color:var(--dsw-alias-label-secondary)}",
       ".glmq-limit-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
-      ".glmq-limit-value{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-primary);font-weight:600}",
-      ".glmq-bar{height:3px;border-radius:999px;background:var(--dsw-alias-border-l1);overflow:hidden}",
+      ".glmq-limit{background:var(--dsw-alias-interactive-bg-hover);border-radius:10px;padding:9px 10px;display:flex;flex-direction:column;gap:6px;min-width:0}",
+      ".glmq-limit-head{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--dsw-alias-label-secondary);min-width:0}",
+      ".glmq-limit-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+      ".glmq-limit-big{display:flex;align-items:baseline;gap:6px}",
+      ".glmq-limit-value{font-size:17px;line-height:1.1;font-weight:700;font-variant-numeric:tabular-nums}",
+      ".glmq-limit-time{margin-left:auto;font-size:10px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums;white-space:nowrap}",
+      ".glmq-bar{height:5px;border-radius:999px;background:var(--dsw-alias-border-l1);overflow:hidden}",
       ".glmq-bar-fill{height:100%;border-radius:999px;background:var(--glmq-state,var(--dsw-alias-state-success-primary));transition:width .2s ease}",
       ".glmq-meta{font-size:10.5px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums}",
       ".glmq-reset{display:inline-flex;align-items:center;gap:4px;color:var(--glmq-state,var(--dsw-alias-label-tertiary))}",
@@ -113,6 +126,8 @@ window.__ModuleLoader__.load({
       ".glmq-seg{display:inline-flex;align-items:center;gap:3px}",
       ".glmq-seg-label{color:var(--dsw-alias-label-tertiary)}",
       ".glmq-sep{margin:0 4px;color:var(--dsw-alias-separator-primary,var(--dsw-alias-label-tertiary))}",
+      ".glmq-spark{display:flex;align-items:flex-end;gap:1px;height:26px}",
+      ".glmq-spark span{flex:1;min-width:1px;border-radius:1px 1px 0 0;background:var(--dsw-alias-brand-primary);opacity:.5}",
       ".glmq-detail{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--dsw-alias-label-tertiary)}",
       ".glmq-detail li{display:flex;gap:6px}",
       ".glmq-detail .glmq-detail-usage{margin-left:auto;font-variant-numeric:tabular-nums}",
@@ -143,6 +158,29 @@ window.__ModuleLoader__.load({
       return 'var(--dsw-alias-state-success-primary)';
     }
 
+    /**
+     * Panel card colors, synced with the reference screenshot: accents are
+     * assigned by window identity, not response order — the 5h token window is
+     * always blue (#0B7FFF), the tool-call window always purple (#9E77ED), the
+     * weekly window teal, credits amber, anything else rose. Accents yield to
+     * the shared thresholds at ≥80% (warn amber) and ≥95% (critical red),
+     * tinting text and bar alike.
+     */
+    const typeOf = (limit) => String(limit.type || '').toUpperCase();
+
+    function limitAccent(limit, type) {
+      const unit = Number(limit.unit);
+      if (type.includes('TOKEN')) return '#0b7fff';
+      if (type.includes('TIME') || type.includes('TOOL') || type.includes('MCP')) return '#9e77ed';
+      if (unit === 4) return '#14b8a6';
+      if (type.includes('CREDIT')) return '#f59e0b';
+      return '#f43f5e';
+    }
+    function cardColor(pct, limit, type) {
+      if (pct >= 80) return stateColor(pct);
+      return limitAccent(limit, type);
+    }
+
     function fmtCompact(value, locale) {
       const n = Number(value);
       if (!Number.isFinite(n)) return '0';
@@ -160,7 +198,8 @@ window.__ModuleLoader__.load({
       const now = new Date();
       const sameDay = date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
       const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const label = sameDay ? time : `${date.getMonth() + 1}-${date.getDate()} ${time}`;
+      const todayWord = t('today') || '';
+      const label = sameDay ? [todayWord, time].filter(Boolean).join(' ') : `${date.getMonth() + 1}-${date.getDate()} ${time}`;
       const deltaMin = Math.round((ms - Date.now()) / 60_000);
       let countdown;
       if (deltaMin <= 0) countdown = '<1m';
@@ -188,7 +227,7 @@ window.__ModuleLoader__.load({
       const n = Number(limit.number);
       const unitWord = { 1: t('unitDay'), 2: t('unitDay'), 3: t('unitHour'), 4: t('unitWeek'), 5: t('unitMonth') }[Number(limit.unit)];
       const win = unitWord && Number.isFinite(n) && n > 0 ? `${n > 1 ? n : ''}${unitWord}` : null;
-      return { label: win ? `${base} · ${win}` : base };
+      return { label: win ? `${base} · ${win}` : base, base, win };
     }
 
     function useQuotaPoll(enabled) {
@@ -248,36 +287,43 @@ window.__ModuleLoader__.load({
       return [state, (force) => { if (tickRef.current) tickRef.current(force); }];
     }
 
+    /**
+     * Card-style limit row (two-column grid): header with the window title
+     * (the 5h card additionally shows its live countdown at the right of the
+     * header), a large percentage with the reset moment as muted trailing
+     * text, and a thick accent-colored progress bar. Per-model usageDetails
+     * fold into the hover tooltip instead of taking panel space.
+     */
     function LimitRow({ limit, t, isPrimary }) {
       const pct = Math.max(0, Math.min(100, Math.round(Number(limit.percentage) || 0)));
       const info = limitInfo(limit, t);
       const reset = resetInfo(limit.nextResetTime, t);
-      const children = [
-        h('div', { className: 'glmq-limit-row', key: 'row' },
-          h('span', { className: 'glmq-limit-label' }, info.label),
-          // Weekly/monthly/tool windows reset on a fixed schedule: the reset
-          // moment sits inline with the label. The 5h window is the only one
-          // users count down to, so it keeps its own meta line under the bar.
-          !isPrimary && reset
-            ? h('span', { className: 'glmq-limit-reset', title: reset.title }, reset.label, ' ', t('resetIn'))
-            : null,
-          h('span', { className: 'glmq-limit-value', style: { color: stateColor(pct) } }, pct + '%')),
-        h('div', { className: 'glmq-bar', key: 'bar' },
-          h('div', { className: 'glmq-bar-fill', style: { width: pct + '%', '--glmq-state': stateColor(pct) } })),
-      ];
+      const detailLines = Array.isArray(limit.usageDetails) && limit.usageDetails.length > 0
+        ? limit.usageDetails.map((entry) => `${entry.modelCode || entry.show_name || '-'}: ${entry.usage ?? 0}`)
+        : [];
+      // absolute usage counters (call-count style limits carry currentValue /
+      // usage / remaining) surface in the tooltip next to the percentage
+      const a = Number(limit.currentValue);
+      const b = Number(limit.usage);
+      const c = Number(limit.remaining);
+      const absLine = Number.isFinite(a) && Number.isFinite(b) && Number.isFinite(c)
+        ? String(t('absUsage') || '{a}/{b} · {c}').replace('{a}', a).replace('{b}', b).replace('{c}', c)
+        : null;
+      const tip = [info.label + (reset ? ` · ${reset.title}` : ''), absLine, ...detailLines].filter(Boolean).join('\n');
+      const accent = cardColor(pct, limit, typeOf(limit));
+      const pctColor = pct >= 80 ? accent : 'var(--dsw-alias-label-primary)';
+      const headChildren = [h('span', { className: 'glmq-limit-title', key: 'title' }, info.win || info.base)];
       if (isPrimary && reset) {
-        children.push(h('div', { className: 'glmq-meta', key: 'meta' },
-          h('span', { className: 'glmq-limit-reset' },
-            CLOCK_ICON,
-            h('span', null, `${reset.countdown} ${t('resetIn')} · ${reset.label}`))));
+        // the 5h window's live countdown sits at the top of its card
+        headChildren.push(h('span', { className: 'glmq-limit-time', key: 'countdown' }, reset.countdown));
       }
-      if (Array.isArray(limit.usageDetails) && limit.usageDetails.length > 0) {
-        children.push(h('ul', { className: 'glmq-detail', key: 'detail' },
-          limit.usageDetails.map((entry, index) => h('li', { key: entry.modelCode || String(index) },
-            h('span', null, entry.modelCode || entry.show_name || '-'),
-            h('span', { className: 'glmq-detail-usage' }, String(entry.usage ?? 0))))));
-      }
-      return h('div', { className: 'glmq-limit' }, children);
+      return h('div', { className: 'glmq-limit', title: tip },
+        h('div', { className: 'glmq-limit-head' }, headChildren),
+        h('div', { className: 'glmq-limit-big' },
+          h('span', { className: 'glmq-limit-value', style: { color: pctColor } }, pct + '%'),
+          reset ? h('span', { className: 'glmq-limit-time' }, reset.label) : null),
+        h('div', { className: 'glmq-bar' },
+          h('div', { className: 'glmq-bar-fill', style: { width: pct + '%', '--glmq-state': accent } })));
     }
 
     /**
@@ -362,7 +408,8 @@ window.__ModuleLoader__.load({
       } else {
         const suffix = state.stale ? '*' : '';
         // Variant A: the 5h window's reset countdown joins the pill as a muted
-        // trailing segment, tinted with the 5h window's state color.
+        // trailing segment. Segment colors share the panel cards' accent
+        // palette (same limit → same color), still overridden at warn/critical.
         const primary = segments[0];
         const primaryPct = Math.max(0, Math.min(100, Math.round(Number(primary.limit.percentage) || 0)));
         const primaryReset = resetInfo(primary.limit.nextResetTime, t);
@@ -370,15 +417,16 @@ window.__ModuleLoader__.load({
           h('span', { key: 'name' }, 'GLM'),
           ...segments.map((seg, index) => {
             const pct = Math.max(0, Math.min(100, Math.round(Number(seg.limit.percentage) || 0)));
+            const accent = cardColor(pct, seg.limit, typeOf(seg.limit));
             return h('span', { key: seg.key, className: 'glmq-seg', title: limitInfo(seg.limit, t).label },
               h('span', { className: 'glmq-seg-label' }, seg.label),
-              h('span', { className: 'glmq-pct', style: { '--glmq-state': stateColor(pct) } }, pct + '%'),
+              h('span', { className: 'glmq-pct', style: { '--glmq-state': accent } }, pct + '%'),
               index < segments.length - 1 ? h('span', { className: 'glmq-sep' }, '·') : null);
           }),
           primaryReset
             ? h('span', { key: 'reset', className: 'glmq-seg', title: `${limitInfo(primary.limit, t).label} · ${primaryReset.title}` },
               h('span', { className: 'glmq-sep' }, '·'),
-              h('span', { className: 'glmq-reset', style: { '--glmq-state': stateColor(primaryPct) } },
+              h('span', { className: 'glmq-reset', style: { '--glmq-state': cardColor(primaryPct, primary.limit, typeOf(primary.limit)) } },
                 CLOCK_ICON,
                 h('span', { className: 'glmq-hhmm' }, primaryReset.countdown)))
             : null,
@@ -418,20 +466,43 @@ window.__ModuleLoader__.load({
             }, EXTLINK_ICON),
             h('button', { className: 'glmq-refresh', title: t('refresh'), 'aria-label': t('refresh'), onClick: () => refresh(true) }, REFRESH_ICON)),
           limits.length > 0
-            ? limits.map((limit) => h(LimitRow, {
+            ? h('div', { className: 'glmq-cards' }, limits.map((limit) => h(LimitRow, {
               key: limit.type, limit, t,
-              // the 5h token window is the primary (countdown) row
+              // the 5h token window is the primary (countdown) card
               isPrimary: typeOf(limit).includes('TOKEN') && Number(limit.unit) === 3,
-            }))
+            })))
             : h('div', { className: 'glmq-meta' }, state.phase === 'error' ? t('error') : t('loading')),
           (() => {
-            const total = state.modelUsage && state.modelUsage.totalUsage;
+            const mu = state.modelUsage;
+            const total = mu && mu.totalUsage;
             if (!total) return null;
-            const rows = Array.isArray(total.modelSummaryList) ? total.modelSummaryList.slice(0, 6) : [];
+            const rows = (Array.isArray(total.modelSummaryList) ? total.modelSummaryList.slice() : [])
+              .sort((x, y) => Number(x.sortOrder ?? 0) - Number(y.sortOrder ?? 0))
+              .slice(0, 6);
+            // hourly token series -> mini sparkline; tooltip carries the time
+            // range, peak hour and the call-count series
+            const series = Array.isArray(mu.tokensUsage) ? mu.tokensUsage : [];
+            const times = Array.isArray(mu.x_time) ? mu.x_time : [];
+            const calls = Array.isArray(mu.modelCallCount) ? mu.modelCallCount : [];
+            const peak = series.length > 0 ? Math.max(...series) : 0;
+            const callsSum = calls.reduce((sum, n) => sum + (Number(n) || 0), 0);
+            const spark = series.length > 0 && peak > 0
+              ? h('div', {
+                className: 'glmq-spark',
+                title: String(t('sparkTip') || '{range} · {peak} · {calls}')
+                  .replace('{range}', times.length > 0 ? `${times[0]} – ${times[times.length - 1]}` : '-')
+                  .replace('{peak}', fmtCompact(peak, loc))
+                  .replace('{calls}', String(callsSum)),
+              }, series.map((value, i) => h('span', {
+                key: i,
+                style: { height: Math.max(4, Math.round((value / peak) * 100)) + '%' },
+              })))
+              : null;
             return h('div', { className: 'glmq-limit' },
               h('div', { className: 'glmq-limit-row' },
                 h('span', { className: 'glmq-limit-label' }, t('usage24h')),
                 h('span', { className: 'glmq-limit-value' }, fmtCompact(total.totalTokensUsage, loc))),
+              spark,
               rows.length > 0 ? h('ul', { className: 'glmq-detail' },
                 rows.map((model) => h('li', { key: model.modelName },
                   h('span', null, model.modelName),
