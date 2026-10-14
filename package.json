@@ -1,7 +1,8 @@
 {
   "name": "dsh-glm-quota-dock",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "type": "module",
+  "main": "index.js",
   "description": "Shows GLM Coding Plan quota usage and the 5-hour window reset countdown next to the session stats row.",
   "repository": {
     "type": "git",
@@ -29,5 +30,11 @@
       "immediately": true,
       "inject": ["@deepseek-ai/dsh-client-ui-conversation"]
     }
+  },
+  "peerDependencies": {
+    "react": "*"
+  },
+  "devDependencies": {
+    "react": "*"
   }
 }

@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs/promises";
+import fsSync from "node:fs";
 
 const run = promisify(execFileCb);
 
@@ -29,6 +30,47 @@ const DEFAULT_INTERVAL_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 20_000;
 const NPM_PACKAGE = "dsh-glm-quota-dock";
 const UPDATE_TIMEOUT_MS = 180_000;
+
+// 客户端轮询参数(随 payload 下发,避免 client 侧再硬编码一套周期)。
+const CLIENT_IDLE_AFTER_MS = 5 * 60_000;
+const CLIENT_IDLE_POLL_MS = 5 * 60_000;
+const CLIENT_UPDATE_CHECK_MS = 60 * 60_000;
+
+/**
+ * Standard Schema v1 最小实现(官方要求导出 Config schema 校验配置;本包零依赖,
+ * 不引入 Schemastery,直接实现 Cordis 要求的 '~standard' 接口):加载时校验类型、
+ * 填充默认值,非法配置让插件加载失败并给出明确错误。
+ */
+export const Config = {
+  vendor: "glm-quota-dock",
+  version: 1,
+  "~standard": {
+    validate(value) {
+      const input = value && typeof value === "object" ? value : {};
+      const out = {};
+      const issues = [];
+      for (const key of ["endpoint", "apiKey", "apiKeyRef"]) {
+        if (input[key] === undefined || input[key] === null) continue;
+        if (typeof input[key] !== "string" || input[key].trim() === "") {
+          issues.push({ message: `${key} must be a non-empty string`, path: [key] });
+        } else {
+          out[key] = input[key];
+        }
+      }
+      if (input.minIntervalSec !== undefined && input.minIntervalSec !== null) {
+        const n = Number(input.minIntervalSec);
+        if (!Number.isFinite(n) || n <= 0) issues.push({ message: "minIntervalSec must be a positive number", path: ["minIntervalSec"] });
+        else out.minIntervalSec = n;
+      }
+      if (input.enableSelfUpdate !== undefined && input.enableSelfUpdate !== null) {
+        if (typeof input.enableSelfUpdate !== "boolean") issues.push({ message: "enableSelfUpdate must be a boolean", path: ["enableSelfUpdate"] });
+        else out.enableSelfUpdate = input.enableSelfUpdate;
+      }
+      if (issues.length > 0) return { issues };
+      return { value: out };
+    },
+  },
+};
 
 /** 声明依赖顺序:排在这些服务之后激活,保证 ctx.get 一定能取到。 */
 export const inject = ["connection", "credentials"];
@@ -118,6 +160,14 @@ async function refresh(ctx, config) {
       quota: quotaResult.value.data ?? null,
       modelUsage: usageResult.status === "fulfilled" ? usageResult.value.data ?? null : null,
       fetchedAt: Date.now(),
+      // 下发客户端轮询参数与能力开关,client 不再各自硬编码
+      client: {
+        pollMs: minPollMs(config),
+        idleAfterMs: CLIENT_IDLE_AFTER_MS,
+        idlePollMs: CLIENT_IDLE_POLL_MS,
+        updateCheckMs: CLIENT_UPDATE_CHECK_MS,
+        enableSelfUpdate: config?.enableSelfUpdate !== false,
+      },
     };
     cached = { payload, fetchedAt: payload.fetchedAt };
     return { ...payload, cached: false };
@@ -132,11 +182,15 @@ async function refresh(ctx, config) {
 
 // 带最小间隔的缓存读取:缓存足够新时直接返回;force 绕过缓存;
 // 并发请求共享同一个进行中的 refresh(inflight 去重)。
-async function getQuota(ctx, config, force) {
+function minPollMs(config) {
   const configured = Number(config?.minIntervalSec);
-  const minMs = Number.isFinite(configured) && configured > 0
+  return Number.isFinite(configured) && configured > 0
     ? Math.max(MIN_INTERVAL_MS, configured * 1000)
     : DEFAULT_INTERVAL_MS;
+}
+
+async function getQuota(ctx, config, force) {
+  const minMs = minPollMs(config);
   const fresh = cached !== null && Date.now() - cached.fetchedAt < minMs;
   if (fresh && !force) return { ...cached.payload, cached: true };
   if (!inflight) {
@@ -178,6 +232,9 @@ export function apply(ctx, config) {
     methods: ["POST"],
     requestBody: "buffered",
     fetch: async () => {
+      if (config?.enableSelfUpdate === false) {
+        return json({ ok: false, error: "self-update disabled by config (enableSelfUpdate: false)" }, 403);
+      }
       if (updateInflight) return json({ ok: false, error: "update already in progress" }, 409);
       updateInflight = runSelfUpdate().finally(() => { updateInflight = null; });
       return updateInflight;
@@ -195,10 +252,18 @@ function json(payload, status = 200) {
   });
 }
 
-/** 本包安装位置倒推 profile 目录(node_modules/dsh-glm-quota-dock/ → profile)。 */
+/** 本包安装位置倒推 profile 目录(node_modules/dsh-glm-quota-dock/ → profile)。
+ *  仅在 hoisted 布局下成立;防御性校验目标目录确实是 profile(含 dsh.profile)。 */
 function profileDir() {
   const here = path.dirname(fileURLToPath(import.meta.url));
-  return path.resolve(here, "..", "..");
+  const dir = path.resolve(here, "..", "..");
+  const manifest = path.join(dir, "package.json");
+  if (fsSync.existsSync(manifest)) {
+    try {
+      if (JSON.parse(fsSync.readFileSync(manifest, "utf8"))?.dsh?.profile) return dir;
+    } catch { /* fall through */ }
+  }
+  throw new Error("cannot locate profile directory (non-hoisted install layout?)");
 }
 
 function pnpmCandidates() {
@@ -208,17 +273,26 @@ function pnpmCandidates() {
     process.execPath,
     path.join(os.homedir(), ".dsh", "dsh-runtimes", "dsh-primary-runtime", "dependencies", "pnpm", "bin", "pnpm.mjs"),
   ]);
-  list.push(["pnpm"]);
+  // PATH 回退:Windows 下 pnpm 是 .cmd,execFile 不经 shell 跑不了,用 shell 转发
+  list.push(["pnpm", { shell: true }]);
   return list;
 }
 
 async function runSelfUpdate() {
-  const dir = profileDir();
+  let dir;
+  try {
+    dir = profileDir();
+  } catch (error) {
+    return json({ ok: false, error: String(error.message || error) }, 500);
+  }
   const args = ["update", NPM_PACKAGE, "--latest", "--config.minimum-release-age=0"];
   let lastError = "no pnpm candidate worked";
-  for (const [cmd, ...cmdArgs] of pnpmCandidates()) {
+  for (const candidate of pnpmCandidates()) {
+    const [cmd, ...rest] = candidate;
+    const cmdArgs = rest.filter((a) => typeof a === "string");
+    const opts = { cwd: dir, timeout: UPDATE_TIMEOUT_MS, windowsHide: true, ...rest.find((a) => a && typeof a === "object") };
     try {
-      await run(cmd, [...cmdArgs, ...args], { cwd: dir, timeout: UPDATE_TIMEOUT_MS, windowsHide: true });
+      await run(cmd, [...cmdArgs, ...args], opts);
       const pkgFile = path.join(dir, "node_modules", NPM_PACKAGE, "package.json");
       const version = JSON.parse(await fs.readFile(pkgFile, "utf8")).version;
       return json({ ok: true, version });

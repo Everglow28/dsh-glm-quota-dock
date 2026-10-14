@@ -20,14 +20,13 @@ window.__ModuleLoader__.load({
     // This plugin's own version (kept in sync with package.json by hand; the
     // client bundle cannot read package.json at runtime). Shown as muted "v"
     // text in the panel footer — deliberately unlike the plan-tier badge.
-    const PLUGIN_VERSION = '1.3.0';
+    const PLUGIN_VERSION = '1.3.1';
     const NPM_PACKAGE = 'dsh-glm-quota-dock';
     const UPDATE_CHECK_MS = 60 * 60_000; // re-check npm for a newer release hourly
     let updateCheck = { at: 0, latest: null }; // module-level: shared across mounts
 
     const DICTS = {
       zh: {
-        planLabel: '额度',
         tokensBase: 'Token 额度',
         toolsBase: '工具调用额度',
         creditsBase: '积分额度',
@@ -36,14 +35,12 @@ window.__ModuleLoader__.load({
         unitMonth: '月',
         unitDay: '天',
         resetIn: '重置',
-        countdownMeta: '{d}后重置 · {t}',
         today: '今日',
         refresh: '刷新',
         loading: '读取中…',
         error: '额度获取失败',
         stale: '数据过期',
         cachedPrefix: '缓存于',
-        usageDetail: '用量明细',
         usage24h: '近 24 小时 Token',
         calls: '次调用',
         usagePage: '在浏览器中打开用量页',
@@ -65,7 +62,6 @@ window.__ModuleLoader__.load({
         planDescCredit: '新版积分套餐:按 Token 消耗积分抵扣',
       },
       en: {
-        planLabel: 'Quota',
         tokensBase: 'Token quota',
         toolsBase: 'Tool quota',
         creditsBase: 'Credit quota',
@@ -74,14 +70,12 @@ window.__ModuleLoader__.load({
         unitMonth: 'mo',
         unitDay: 'd',
         resetIn: 'resets',
-        countdownMeta: 'resets in {d} · {t}',
         today: '',
         refresh: 'Refresh',
         loading: 'Loading…',
         error: 'Quota unavailable',
         stale: 'stale',
         cachedPrefix: 'cached',
-        usageDetail: 'Usage detail',
         usage24h: 'Tokens (last 24h)',
         calls: 'calls',
         usagePage: 'Open usage page in browser',
@@ -140,8 +134,6 @@ window.__ModuleLoader__.load({
       ".glmq-reset{display:inline-flex;align-items:center;gap:4px;color:var(--glmq-state,var(--dsw-alias-label-tertiary))}",
       ".glmq-reset svg{width:11px;height:11px;flex:none}",
       ".glmq-reset .glmq-hhmm{font-variant-numeric:tabular-nums}",
-      ".glmq-limit-reset{display:inline-flex;align-items:center;gap:3px;color:var(--glmq-state,var(--dsw-alias-state-success-primary));opacity:.8}",
-      ".glmq-limit-reset svg{width:9px;height:9px;flex:none}",
       ".glmq-panel-foot{display:flex;align-items:center;gap:6px;white-space:nowrap;border-top:0.5px solid var(--dsw-alias-border-l1);padding-top:10px;font-size:10.5px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums}",
       ".glmq-panel-foot>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis}",
       ".glmq-ver{flex:none;color:var(--dsw-alias-label-tertiary)}",
@@ -158,8 +150,6 @@ window.__ModuleLoader__.load({
       ".glmq-btn-ghost:hover{background:var(--dsw-alias-interactive-bg-hover)}",
       ".glmq-btn-go{background:var(--dsw-alias-state-success-primary);color:var(--dsw-alias-label-on-accent,#fff)}",
       ".glmq-btn-go:hover{filter:brightness(1.08)}",
-      ".glmq-info{cursor:help;margin-left:4px;color:var(--dsw-alias-label-tertiary)}",
-      ".glmq-info:hover{color:var(--dsw-alias-label-secondary)}",
       ".glmq-seg{display:inline-flex;align-items:center;gap:3px}",
       ".glmq-seg-label{color:var(--dsw-alias-label-secondary)}",
       ".glmq-sep{margin:0 4px;color:var(--dsw-alias-separator-primary,var(--dsw-alias-label-tertiary))}",
@@ -272,11 +262,17 @@ window.__ModuleLoader__.load({
       const [, setBump] = React.useState(0);
       const tickRef = React.useRef(null);
       const enabledRef = React.useRef(enabled);
+      // Host 下发的轮询参数(payload.client);未到达前用本地默认值
+      const remoteRef = React.useRef(null);
       enabledRef.current = enabled;
       React.useEffect(() => {
         let alive = true;
         let lastFetchAt = 0;
         let lastActivityAt = Date.now();
+        let timer = null;
+        let currentMs = POLL_MS;
+        const idleAfter = () => (remoteRef.current?.idleAfterMs || IDLE_AFTER_MS);
+        const idlePoll = () => (remoteRef.current?.idlePollMs || IDLE_POLL_MS);
         const tick = async (force) => {
           if (!enabledRef.current) return;
           lastFetchAt = Date.now();
@@ -284,27 +280,40 @@ window.__ModuleLoader__.load({
             const res = await fetch('/api/glm-quota' + (force ? '?force=1' : ''), { headers: { accept: 'application/json' } });
             if (!res.ok) throw new Error('HTTP ' + res.status);
             const json = await res.json();
-            if (alive) setState(json.ok ? { phase: 'ok', ...json } : { phase: 'error', error: json.error || 'upstream error' });
+            if (alive) {
+              if (json.client && typeof json.client === 'object') remoteRef.current = json.client;
+              applyInterval();
+              setState(json.ok ? { phase: 'ok', ...json } : { phase: 'error', error: json.error || 'upstream error' });
+            }
           } catch (error) {
             if (alive) setState({ phase: 'error', error: String(error) });
           }
         };
         tickRef.current = tick;
-        if (enabledRef.current) tick(false);
-        const isActive = () => Date.now() - lastActivityAt < IDLE_AFTER_MS;
-        const timer = setInterval(() => {
+        // Host 下发的 pollMs 与本地不同时重建 interval
+        const applyInterval = () => {
+          const desired = Number(remoteRef.current?.pollMs);
+          if (!Number.isFinite(desired) || desired < 5_000 || desired === currentMs) return;
+          currentMs = desired;
+          if (timer) clearInterval(timer);
+          timer = setInterval(onTick, currentMs);
+        };
+        const onTick = () => {
           if (document.visibilityState !== 'visible') return;
           setBump((n) => n + 1); // force a render so the projection snapshot is re-read even if a notification was missed
           if (enabledRef.current) {
-            if (isActive()) {
+            if (Date.now() - lastActivityAt < idleAfter()) {
               tick(false);
-            } else if (Date.now() - lastFetchAt >= IDLE_POLL_MS) {
-              tick(false); // idle: slow to one fetch per 5 min
+            } else if (Date.now() - lastFetchAt >= idlePoll()) {
+              tick(false); // idle: slow to the Host-specified idle cadence
             }
           }
-        }, POLL_MS);
+        };
+        tickRef.current = tick;
+        if (enabledRef.current) tick(false);
+        timer = setInterval(onTick, currentMs);
         const markActivity = () => {
-          const wasIdle = !isActive();
+          const wasIdle = Date.now() - lastActivityAt >= idleAfter();
           lastActivityAt = Date.now();
           if (wasIdle && document.visibilityState === 'visible') tick(false);
         };
@@ -403,9 +412,42 @@ window.__ModuleLoader__.load({
       const [state, refresh] = useQuotaPoll(isGlmSession);
       const [open, setOpen] = React.useState(false);
       const rootRef = React.useRef(null);
-      // quiet update check: at most one registry hit per hour, shared module
-      // cache, failures silently ignored — the footer just stays version-only
+      // quiet update check: interval comes from the Host config (payload.client),
+      // shared module cache; cooldown is set only on SUCCESS so an offline
+      // session retries on the next mount instead of white-waiting an hour
       const [latestVer, setLatestVer] = React.useState(updateCheck.latest);
+      const clientCfg = state.phase === 'ok' && state.client && typeof state.client === 'object' ? state.client : null;
+      React.useEffect(() => {
+        let alive = true;
+        const interval = Number(clientCfg?.updateCheckMs) || UPDATE_CHECK_MS;
+        if (Date.now() - updateCheck.at < interval) return undefined;
+        fetch('https://registry.npmjs.org/' + NPM_PACKAGE + '/latest', { headers: { accept: 'application/json' } })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((json) => {
+            const v = json && typeof json.version === 'string' ? json.version : null;
+            if (alive && v) {
+              updateCheck.at = Date.now(); // success only: failures retry next mount
+              updateCheck.latest = v;
+              setLatestVer(v);
+            }
+          })
+          .catch(() => { /* offline / blocked: footer stays version-only */ });
+        return () => { alive = false; };
+      }, [clientCfg]);
+      // numeric x.y.z compare; pre-release tags ('-beta') are truncated by
+      // parseInt and therefore compared as their leading numbers — fine for
+      // this plugin's plain-number releases, don't ship tagged versions
+      const isNewer = (candidate, current) => {
+        const a = String(candidate).split('.').map((n) => parseInt(n, 10));
+        const b = String(current).split('.').map((n) => parseInt(n, 10));
+        for (let i = 0; i < 3; i += 1) {
+          if ((a[i] || 0) > (b[i] || 0)) return true;
+          if ((a[i] || 0) < (b[i] || 0)) return false;
+        }
+        return false;
+      };
+      const selfUpdateEnabled = clientCfg ? clientCfg.enableSelfUpdate !== false : true;
+      const hasUpdate = selfUpdateEnabled && latestVer && isNewer(latestVer, PLUGIN_VERSION);
       const [updatePhase, setUpdatePhase] = React.useState('idle');
       const [confirmOpen, setConfirmOpen] = React.useState(false);
       const updWrapRef = React.useRef(null);
@@ -437,29 +479,6 @@ window.__ModuleLoader__.load({
           })
           .catch(() => setUpdatePhase('failed'));
       };
-      React.useEffect(() => {
-        let alive = true;
-        if (Date.now() - updateCheck.at < UPDATE_CHECK_MS) return undefined;
-        updateCheck.at = Date.now();
-        fetch('https://registry.npmjs.org/' + NPM_PACKAGE + '/latest', { headers: { accept: 'application/json' } })
-          .then((res) => (res.ok ? res.json() : null))
-          .then((json) => {
-            const v = json && typeof json.version === 'string' ? json.version : null;
-            if (alive && v) { updateCheck.latest = v; setLatestVer(v); }
-          })
-          .catch(() => { /* offline / blocked: footer stays version-only */ });
-        return () => { alive = false; };
-      }, []);
-      const isNewer = (candidate, current) => {
-        const a = String(candidate).split('.').map((n) => parseInt(n, 10));
-        const b = String(current).split('.').map((n) => parseInt(n, 10));
-        for (let i = 0; i < 3; i += 1) {
-          if ((a[i] || 0) > (b[i] || 0)) return true;
-          if ((a[i] || 0) < (b[i] || 0)) return false;
-        }
-        return false;
-      };
-      const hasUpdate = latestVer && isNewer(latestVer, PLUGIN_VERSION);
 
       React.useEffect(() => {
         if (!open) return undefined;
