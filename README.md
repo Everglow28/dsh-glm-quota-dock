@@ -17,9 +17,9 @@ A lightweight DeepSeek Harness plugin that shows your GLM Coding Plan quota as a
 
 ## 截图
 
-> 以下为 v1.1.0 旧版纵向面板的历史截图(着色逻辑仍有效);自 v1.2.0 起面板已重构为双列卡片式(标题 + 大号百分比 + 粗进度条),新版截图待补。
+> v1.3.1 双列卡片式详情面板(Lite 档模拟数据、本地渲染,着色与布局与真实环境一致):
 
-| 正常(<80%,绿) | 告警(≥80%,黄) | 临界(≥95%,红) |
+| 正常(<80%,绿/蓝) | 告警(≥80%,琥珀) | 临界(≥95%,红) |
 | :---: | :---: | :---: |
 | ![详情面板 正常(45%)](docs/images/panel-45.png) | ![详情面板 告警(88%)](docs/images/panel-88.png) | ![详情面板 临界(99%)](docs/images/panel-99.png) |
 
