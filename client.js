@@ -108,7 +108,7 @@ window.__ModuleLoader__.load({
       ".glmq-pct{color:var(--glmq-state,var(--dsw-alias-label-secondary));font-weight:600}",
       ".glmq-panel{position:absolute;bottom:calc(100% + 10px);left:50%;transform:translateX(-50%);z-index:30;width:360px;box-sizing:border-box;background:var(--dsw-alias-bg-overlay);border:0.5px solid var(--dsw-alias-border-l1);border-radius:14px;box-shadow:0 4px 16px rgba(0,0,0,.10),0 12px 40px rgba(0,0,0,.12);padding:14px;display:flex;flex-direction:column;gap:12px;text-align:left}",
       ".glmq-panel-head{display:flex;align-items:center;gap:7px;color:var(--dsw-alias-label-primary);font-size:12.5px;font-weight:600}",
-      ".glmq-panel-head svg{flex:none;width:15px;height:15px;color:var(--dsw-alias-brand-primary)}",
+      ".glmq-panel-head svg{flex:none;width:15px;height:15px;color:#0b7fff}",
       ".glmq-refresh{margin-left:auto;border:none;background:0 0;color:var(--dsw-alias-label-tertiary);cursor:pointer;padding:2px;border-radius:6px;display:inline-flex}",
       ".glmq-refresh:hover{color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover)}",
       ".glmq-refresh svg{width:13px;height:13px}",
@@ -116,7 +116,7 @@ window.__ModuleLoader__.load({
       ".glmq-extlink:hover{color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover)}",
       ".glmq-extlink svg{width:13px;height:13px}",
       ".glmq-spacer{flex:1}",
-      ".glmq-plan-tag{cursor:help;position:relative;font-size:10px;font-weight:600;color:var(--dsw-alias-brand-primary);background:color-mix(in srgb,var(--dsw-alias-brand-primary) 10%,transparent);border-radius:999px;padding:1px 7px;letter-spacing:.02em;font-weight:600}",
+      ".glmq-plan-tag{cursor:help;position:relative;font-size:10px;font-weight:600;color:#0b7fff;background:color-mix(in srgb,#0b7fff 10%,transparent);border-radius:999px;padding:1px 7px;letter-spacing:.02em;font-weight:600}",
       ".glmq-plan-tag::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%) translateY(2px);width:max-content;max-width:224px;box-sizing:border-box;background:var(--dsw-alias-bg-overlay);color:var(--dsw-alias-label-secondary);border:0.5px solid var(--dsw-alias-border-l1);border-radius:9px;box-shadow:0 4px 16px rgba(0,0,0,.10),0 12px 40px rgba(0,0,0,.12);padding:8px 10px;font-size:11px;font-weight:400;line-height:1.65;text-align:left;letter-spacing:normal;white-space:normal;opacity:0;pointer-events:none;transition:opacity .15s ease,transform .15s ease;z-index:40}",
       ".glmq-plan-tag:hover::after{opacity:1;transform:translateX(-50%) translateY(0)}",
       ".glmq-cards{display:grid;grid-template-columns:1fr 1fr;gap:8px}",
@@ -154,7 +154,7 @@ window.__ModuleLoader__.load({
       ".glmq-seg-label{color:var(--dsw-alias-label-secondary)}",
       ".glmq-sep{margin:0 4px;color:var(--dsw-alias-separator-primary,var(--dsw-alias-label-tertiary))}",
       ".glmq-spark{display:flex;align-items:flex-end;gap:1px;height:26px}",
-      ".glmq-spark span{flex:1;min-width:1px;border-radius:1px 1px 0 0;background:var(--dsw-alias-brand-primary);opacity:.75}",
+      ".glmq-spark span{flex:1;min-width:1px;border-radius:1px 1px 0 0;background:#0b7fff;opacity:.85}",
       ".glmq-detail{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--dsw-alias-label-secondary)}",
       ".glmq-detail li{display:flex;gap:6px}",
       ".glmq-detail .glmq-detail-usage{margin-left:auto;font-variant-numeric:tabular-nums}",
@@ -357,6 +357,8 @@ window.__ModuleLoader__.load({
         : null;
       const tip = [info.label + (reset ? ` · ${reset.title}` : ''), absLine, ...detailLines].filter(Boolean).join('\n');
       const accent = cardColor(pct, limit, typeOf(limit));
+      // the big percentage stays neutral until the shared thresholds
+      // (≥80% warn / ≥95% critical) color it with the card accent
       const pctColor = pct >= 80 ? accent : 'var(--dsw-alias-label-primary)';
       const headChildren = [h('span', { className: 'glmq-limit-title', key: 'title' }, info.win || info.base)];
       if (isPrimary && reset) {
@@ -499,10 +501,14 @@ window.__ModuleLoader__.load({
       // Early return AFTER every hook: conditional hook counts crash the slot entry.
       if (!isGlmSession || state.configured === false) return null;
 
-      const limits = state.phase === 'ok' && state.quota && Array.isArray(state.quota.limits)
-        ? state.quota.limits.filter((limit) => Number.isFinite(Number(limit.percentage)))
-        : [];
       const typeOf = (limit) => String(limit.type || '').toUpperCase();
+      const limits = state.phase === 'ok' && state.quota && Array.isArray(state.quota.limits)
+        ? state.quota.limits
+          .filter((limit) => Number.isFinite(Number(limit.percentage)))
+          // the 5h primary window leads the card grid regardless of the
+          // API's response order (reference screenshots put it top-left)
+          .sort((a, b) => (Number(b.unit) === 3 && typeOf(b).includes('TOKEN') ? 1 : 0) - (Number(a.unit) === 3 && typeOf(a).includes('TOKEN') ? 1 : 0))
+        : [];
       const segments = [
         { key: 'tokens', label: t('seg5h'), limit: limits.find((limit) => typeOf(limit).includes('TOKEN') && Number(limit.unit) === 3) },
         { key: 'week', label: t('segWeek'), limit: limits.find((limit) => Number(limit.unit) === 4) },
@@ -606,10 +612,15 @@ window.__ModuleLoader__.load({
                   .replace('{range}', times.length > 0 ? `${times[0]} – ${times[times.length - 1]}` : '-')
                   .replace('{peak}', fmtCompact(peak, loc))
                   .replace('{calls}', String(callsSum)),
-              }, series.map((value, i) => h('span', {
-                key: i,
-                style: { height: Math.max(4, Math.round((value / peak) * 100)) + '%' },
-              })))
+              }, series.map((value, i) => {
+                const v = Number(value) || 0;
+                return h('span', {
+                  key: i,
+                  // zero hours collapse to a faint 2px baseline so real usage
+                  // bars always read clearly against empty time slots
+                  style: { height: v > 0 ? Math.max(4, Math.round((v / peak) * 100)) + '%' : '2px', opacity: v > 0 ? undefined : '.25' },
+                });
+              }))
               : null;
             return h('div', { className: 'glmq-limit' },
               h('div', { className: 'glmq-limit-row' },
