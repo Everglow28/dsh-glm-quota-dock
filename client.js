@@ -158,7 +158,13 @@ window.__ModuleLoader__.load({
       ".glmq-detail{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--dsw-alias-label-secondary)}",
       ".glmq-detail li{display:flex;gap:6px}",
       ".glmq-detail .glmq-detail-usage{margin-left:auto;font-variant-numeric:tabular-nums}",
-      "@media (prefers-reduced-motion:reduce){.glmq-bar-fill{transition:none}.glmq-plan-tag::after{transition:none}}",
+      ".glmq-usage-toggle{display:flex;align-items:baseline;gap:6px;width:100%;border:none;background:0 0;padding:0;font:inherit;font-size:12px;color:var(--dsw-alias-label-secondary);text-align:left;cursor:pointer;border-radius:7px}",
+      ".glmq-usage-toggle:hover .glmq-limit-label,.glmq-usage-toggle:hover .glmq-usage-chev{color:var(--dsw-alias-label-primary)}",
+      ".glmq-usage-toggle:focus-visible{outline:1.5px solid var(--dsw-alias-brand-primary);outline-offset:2px}",
+      ".glmq-usage-chev{display:inline-flex;flex:none;width:12px;height:12px;margin-left:auto;align-self:center;color:var(--dsw-alias-label-tertiary);transition:transform .18s ease,color .12s ease}",
+      ".glmq-usage-chev svg{display:block;width:12px;height:12px}",
+      ".glmq-usage-toggle[aria-expanded=true] .glmq-usage-chev{transform:rotate(180deg)}",
+      "@media (prefers-reduced-motion:reduce){.glmq-bar-fill{transition:none}.glmq-plan-tag::after{transition:none}.glmq-usage-chev{transition:none}}",
     ].join("");
 
     const MARK_ICON = h('svg', { viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true },
@@ -176,6 +182,9 @@ window.__ModuleLoader__.load({
     const EXTLINK_ICON = h('svg', { viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true },
       h('path', { d: 'M6.5 3.5H4a1.5 1.5 0 0 0-1.5 1.5v7A1.5 1.5 0 0 0 4 13.5h7a1.5 1.5 0 0 0 1.5-1.5V9.5', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round' }),
       h('path', { d: 'M9.5 2.5h4v4M13.2 2.8 7.8 8.2', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' }));
+
+    const CHEVRON_ICON = h('svg', { viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true },
+      h('path', { d: 'M4.2 6.2 8 10l3.8-3.8', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' }));
 
     const USAGE_PAGE_URL = 'https://bigmodel.cn/coding-plan/personal/usage';
 
@@ -413,6 +422,9 @@ window.__ModuleLoader__.load({
       const isGlmSession = !!selectionNow && isCodingPlanRoute && isGlmModel;
       const [state, refresh] = useQuotaPoll(isGlmSession);
       const [open, setOpen] = React.useState(false);
+      // 24h usage card starts collapsed (chart/model body unmounted); the
+      // choice lives for the page session only, every fresh load collapses again
+      const [usageOpen, setUsageOpen] = React.useState(false);
       const rootRef = React.useRef(null);
       // quiet update check: interval comes from the Host config (payload.client),
       // shared module cache; cooldown is set only on SUCCESS so an offline
@@ -622,16 +634,24 @@ window.__ModuleLoader__.load({
                 });
               }))
               : null;
+            // The header row doubles as the collapse toggle: collapsed (the
+            // default) keeps only the label + 24h total, while the sparkline,
+            // per-model list and call count mount only while expanded.
             return h('div', { className: 'glmq-limit' },
-              h('div', { className: 'glmq-limit-row' },
+              h('button', {
+                className: 'glmq-usage-toggle',
+                'aria-expanded': usageOpen,
+                onClick: () => setUsageOpen((value) => !value),
+              },
                 h('span', { className: 'glmq-limit-label' }, t('usage24h')),
-                h('span', { className: 'glmq-limit-value' }, fmtCompact(total.totalTokensUsage, loc))),
-              spark,
-              rows.length > 0 ? h('ul', { className: 'glmq-detail' },
+                h('span', { className: 'glmq-limit-value' }, fmtCompact(total.totalTokensUsage, loc)),
+                h('span', { className: 'glmq-usage-chev' }, CHEVRON_ICON)),
+              usageOpen ? spark : null,
+              usageOpen && rows.length > 0 ? h('ul', { className: 'glmq-detail' },
                 rows.map((model) => h('li', { key: model.modelName },
                   h('span', null, model.modelName),
                   h('span', { className: 'glmq-detail-usage' }, fmtCompact(model.totalTokens, loc))))) : null,
-              h('div', { className: 'glmq-meta' }, `${total.totalModelCallCount ?? 0} ${t('calls')}`));
+              usageOpen ? h('div', { className: 'glmq-meta' }, `${total.totalModelCallCount ?? 0} ${t('calls')}`) : null);
           })(),
           state.phase === 'ok' && state.fetchedAt
             ? (() => {
