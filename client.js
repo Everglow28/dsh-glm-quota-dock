@@ -20,7 +20,7 @@ window.__ModuleLoader__.load({
     // This plugin's own version (kept in sync with package.json by hand; the
     // client bundle cannot read package.json at runtime). Shown as muted "v"
     // text in the panel footer — deliberately unlike the plan-tier badge.
-    const PLUGIN_VERSION = '1.3.1';
+    const PLUGIN_VERSION = '1.3.2';
     const NPM_PACKAGE = 'dsh-glm-quota-dock';
     const UPDATE_CHECK_MS = 60 * 60_000; // re-check npm for a newer release hourly
     let updateCheck = { at: 0, latest: null }; // module-level: shared across mounts
