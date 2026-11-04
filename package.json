@@ -4,10 +4,27 @@
   "type": "module",
   "main": "index.js",
   "description": "Shows GLM Coding Plan quota usage and the 5-hour window reset countdown next to the session stats row.",
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "glm",
+    "zhipu",
+    "quota",
+    "coding-plan"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Everglow28/dsh-glm-quota-dock.git"
   },
+  "bugs": {
+    "url": "https://github.com/Everglow28/dsh-glm-quota-dock/issues"
+  },
+  "homepage": "https://github.com/Everglow28/dsh-glm-quota-dock#readme",
   "icon": "./icon.svg",
   "exports": {
     ".": "./index.js",

@@ -1,9 +1,13 @@
 // GLM 额度 dock 插件的 Host 半部(进程内 Harness 插件)。
 //
-// 注册 GET /api/glm-quota(位于 /api 信任栅栏与浏览器鉴权之后),返回缓存的
-// GLM Coding Plan 额度数据。API Key 不会离开 Host 进程:它从凭据服务解析
-// (config.apiKeyRef,默认 ZAI_CODING_CN_API_KEY),或取 config.apiKey——
-// 与 dsh-llm-pi-ai 为 zai-coding-cn 路由读取同一凭据引用的方式一致。
+// 注册三个经 /api 信任栅栏与浏览器鉴权后的路由:
+//   GET  /api/glm-quota          缓存的额度数据(client 轮询)
+//   GET  /api/glm-quota/version  最新发布版本(走 pnpm/npm 同源的 registry 配置)
+//   POST /api/glm-quota/update   在本 profile 内执行 pnpm 自更新
+//
+// API Key 不会离开 Host 进程:它从凭据服务解析(config.apiKeyRef,默认
+// ZAI_CODING_CN_API_KEY),或取 config.apiKey——与 dsh-llm-pi-ai 为
+// zai-coding-cn 路由读取同一凭据引用的方式一致。
 //
 // 上游端点(官方 glm-plan-usage / ZCode 监控接口):
 //   GET {endpoint}/api/monitor/usage/quota/limit
@@ -23,11 +27,17 @@ const run = promisify(execFileCb);
 
 const DEFAULT_REF = "ZAI_CODING_CN_API_KEY";
 const DEFAULT_ENDPOINT = "https://open.bigmodel.cn";
+const DEFAULT_REGISTRY = "https://registry.npmjs.org";
 const QUOTA_PATH = "/api/monitor/usage/quota/limit";
 const MODEL_USAGE_PATH = "/api/monitor/usage/model-usage";
 const MIN_INTERVAL_MS = 30_000;
 const DEFAULT_INTERVAL_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 20_000;
+// 手动强制刷新的最短间隔:连点刷新不再逐个打上游
+const FORCE_MIN_INTERVAL_MS = 5_000;
+// 版本查询缓存:一小时一次的客户端检查不必每次都起 pnpm
+const VERSION_CACHE_MS = 10 * 60_000;
+const VERSION_TIMEOUT_MS = 20_000;
 const NPM_PACKAGE = "dsh-glm-quota-dock";
 const UPDATE_TIMEOUT_MS = 180_000;
 
@@ -49,12 +59,17 @@ export const Config = {
       const input = value && typeof value === "object" ? value : {};
       const out = {};
       const issues = [];
-      for (const key of ["endpoint", "apiKey", "apiKeyRef"]) {
+      for (const key of ["endpoint", "apiKey", "apiKeyRef", "registry"]) {
         if (input[key] === undefined || input[key] === null) continue;
         if (typeof input[key] !== "string" || input[key].trim() === "") {
           issues.push({ message: `${key} must be a non-empty string`, path: [key] });
         } else {
           out[key] = input[key];
+        }
+      }
+      for (const key of ["endpoint", "registry"]) {
+        if (typeof out[key] === "string" && !/^https?:\/\//i.test(out[key].trim())) {
+          issues.push({ message: `${key} must be an http(s) URL`, path: [key] });
         }
       }
       if (input.minIntervalSec !== undefined && input.minIntervalSec !== null) {
@@ -78,9 +93,20 @@ export const inject = ["connection", "credentials"];
 /** @type {{ payload: object, fetchedAt: number } | null} */
 let cached = null;
 let inflight = null;
+/** 上一次强制刷新打上游的时刻(节流用) */
+let lastForceAt = 0;
+/** 版本查询结果缓存:{ at, value } */
+let versionCache = null;
+/** 本进程实际加载的包版本(用于判断自更新是否已越过运行中的 Host 半部) */
+let runningVersionCache;
 
 function fail(message) {
   return new Error(`glm-quota-dock: ${message}`);
+}
+
+function errorMessage(error) {
+  if (error && typeof error.message === "string") return error.message;
+  return String(error);
 }
 
 // 解析上游鉴权 key:优先 config.apiKey,否则从凭据服务按引用名解析。
@@ -137,121 +163,6 @@ async function getJson(url, key) {
   throw fail(`upstream error ${json?.code ?? "?"}: ${json?.msg ?? "unknown"}`);
 }
 
-// 拉取并缓存:先解析 key(失败 = 未配置,configured:false);额度主请求失败
-// 则整体失败;model-usage 为辅,失败不阻塞。已有缓存时降级为 stale 数据。
-async function refresh(ctx, config) {
-  let key;
-  try {
-    key = await resolveKey(ctx, config);
-  } catch (error) {
-    const message = error && typeof error.message === "string" ? error.message : String(error);
-    return { ok: false, configured: false, error: message, fetchedAt: Date.now() };
-  }
-  try {
-    const base = endpointBase(config);
-    const [quotaResult, usageResult] = await Promise.allSettled([
-      getJson(base + QUOTA_PATH, key),
-      getJson(`${base + MODEL_USAGE_PATH}?${usageWindow()}`, key),
-    ]);
-    if (quotaResult.status !== "fulfilled") throw quotaResult.reason;
-    const payload = {
-      ok: true,
-      configured: true,
-      quota: quotaResult.value.data ?? null,
-      modelUsage: usageResult.status === "fulfilled" ? usageResult.value.data ?? null : null,
-      fetchedAt: Date.now(),
-      // 下发客户端轮询参数与能力开关,client 不再各自硬编码
-      client: {
-        pollMs: minPollMs(config),
-        idleAfterMs: CLIENT_IDLE_AFTER_MS,
-        idlePollMs: CLIENT_IDLE_POLL_MS,
-        updateCheckMs: CLIENT_UPDATE_CHECK_MS,
-        enableSelfUpdate: config?.enableSelfUpdate !== false,
-      },
-    };
-    cached = { payload, fetchedAt: payload.fetchedAt };
-    return { ...payload, cached: false };
-  } catch (error) {
-    const message = error && typeof error.message === "string" ? error.message : String(error);
-    if (cached) {
-      return { ...cached.payload, stale: true, lastError: message };
-    }
-    return { ok: false, configured: true, error: message, fetchedAt: Date.now() };
-  }
-}
-
-// 带最小间隔的缓存读取:缓存足够新时直接返回;force 绕过缓存;
-// 并发请求共享同一个进行中的 refresh(inflight 去重)。
-function minPollMs(config) {
-  const configured = Number(config?.minIntervalSec);
-  return Number.isFinite(configured) && configured > 0
-    ? Math.max(MIN_INTERVAL_MS, configured * 1000)
-    : DEFAULT_INTERVAL_MS;
-}
-
-async function getQuota(ctx, config, force) {
-  const minMs = minPollMs(config);
-  const fresh = cached !== null && Date.now() - cached.fetchedAt < minMs;
-  if (fresh && !force) return { ...cached.payload, cached: true };
-  if (!inflight) {
-    inflight = refresh(ctx, config).finally(() => {
-      inflight = null;
-    });
-  }
-  return inflight;
-}
-
-/** Host 插件:注册经过鉴权的 /api/glm-quota 精确 Fetch 路由。 */
-export function apply(ctx, config) {
-  const connection = ctx.get("connection");
-  if (!connection?.fetch || typeof connection.fetch.register !== "function") {
-    throw fail("connection service is unavailable; cannot serve /api/glm-quota");
-  }
-  const dispose = connection.fetch.register({
-    path: "/api/glm-quota",
-    methods: ["GET"],
-    requestBody: "buffered",
-    fetch: async (request) => {
-      const force = String(request?.url ?? "").includes("force=1");
-      const payload = await getQuota(ctx, config, force);
-      return new Response(JSON.stringify(payload), {
-        status: 200,
-        headers: {
-          "content-type": "application/json; charset=utf-8",
-          "cache-control": "no-store",
-        },
-      });
-    },
-  });
-
-  // 自更新:POST /api/glm-quota/update 在 profile 目录执行 pnpm 升级本包,
-  // 返回安装到的新版本。仅前端资源刷新页面即可生效;Host 半部的变更仍需
-  // 重启 DSH。pnpm 解析顺序:环境变量 → DSH 桌面运行时内置 → PATH。
-  const disposeUpdate = connection.fetch.register({
-    path: "/api/glm-quota/update",
-    methods: ["POST"],
-    requestBody: "buffered",
-    fetch: async () => {
-      if (config?.enableSelfUpdate === false) {
-        return json({ ok: false, error: "self-update disabled by config (enableSelfUpdate: false)" }, 403);
-      }
-      if (updateInflight) return json({ ok: false, error: "update already in progress" }, 409);
-      updateInflight = runSelfUpdate().finally(() => { updateInflight = null; });
-      return updateInflight;
-    },
-  });
-  return [dispose, disposeUpdate];
-}
-
-let updateInflight = null;
-
-function json(payload, status = 200) {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
-  });
-}
-
 /** 本包安装位置倒推 profile 目录(node_modules/dsh-glm-quota-dock/ → profile)。
  *  仅在 hoisted 布局下成立;防御性校验目标目录确实是 profile(含 dsh.profile)。 */
 function profileDir() {
@@ -266,6 +177,238 @@ function profileDir() {
   throw new Error("cannot locate profile directory (non-hoisted install layout?)");
 }
 
+/** 本进程加载的包版本;读不到时返回 null(不阻塞任何功能)。 */
+function runningVersion() {
+  if (runningVersionCache !== undefined) return runningVersionCache;
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const manifest = JSON.parse(fsSync.readFileSync(path.join(here, "package.json"), "utf8"));
+    runningVersionCache = typeof manifest?.version === "string" ? manifest.version.trim() : null;
+  } catch {
+    runningVersionCache = null;
+  }
+  return runningVersionCache;
+}
+
+/** 客户端轮询参数与能力开关;成功/降级/未配置三条路径都下发,避免错误态丢配置。 */
+function clientInfo(config) {
+  return {
+    version: runningVersion(),
+    pollMs: minPollMs(config),
+    idleAfterMs: CLIENT_IDLE_AFTER_MS,
+    idlePollMs: CLIENT_IDLE_POLL_MS,
+    updateCheckMs: CLIENT_UPDATE_CHECK_MS,
+    enableSelfUpdate: config?.enableSelfUpdate !== false,
+  };
+}
+
+// 拉取并缓存:先解析 key(失败 = 未配置,configured:false);额度主请求失败
+// 则整体失败;model-usage 为辅,失败不阻塞。已有缓存时降级为 stale 数据。
+async function refresh(ctx, config) {
+  let key;
+  try {
+    key = await resolveKey(ctx, config);
+  } catch (error) {
+    return {
+      ok: false,
+      configured: false,
+      error: errorMessage(error),
+      fetchedAt: Date.now(),
+      client: clientInfo(config),
+    };
+  }
+  try {
+    const base = endpointBase(config);
+    const [quotaResult, usageResult] = await Promise.allSettled([
+      getJson(base + QUOTA_PATH, key),
+      getJson(`${base + MODEL_USAGE_PATH}?${usageWindow()}`, key),
+    ]);
+    if (quotaResult.status !== "fulfilled") throw quotaResult.reason;
+    const payload = {
+      ok: true,
+      configured: true,
+      quota: quotaResult.value.data ?? null,
+      modelUsage: usageResult.status === "fulfilled" ? usageResult.value.data ?? null : null,
+      modelUsageError: usageResult.status === "rejected" ? errorMessage(usageResult.reason) : null,
+      fetchedAt: Date.now(),
+      // 下发客户端轮询参数与能力开关,client 不再各自硬编码
+      client: clientInfo(config),
+    };
+    cached = { payload, fetchedAt: payload.fetchedAt };
+    return { ...payload, cached: false };
+  } catch (error) {
+    const message = errorMessage(error);
+    if (cached) {
+      return { ...cached.payload, stale: true, lastError: message };
+    }
+    return {
+      ok: false,
+      configured: true,
+      error: message,
+      fetchedAt: Date.now(),
+      client: clientInfo(config),
+    };
+  }
+}
+
+// 带最小间隔的缓存读取:缓存足够新时直接返回;force 绕过缓存;
+// 并发请求共享同一个进行中的 refresh(inflight 去重)。
+function minPollMs(config) {
+  const configured = Number(config?.minIntervalSec);
+  return Number.isFinite(configured) && configured > 0
+    ? Math.max(MIN_INTERVAL_MS, configured * 1000)
+    : DEFAULT_INTERVAL_MS;
+}
+
+async function getQuota(ctx, config, force) {
+  const minMs = minPollMs(config);
+  const now = Date.now();
+  const fresh = cached !== null && now - cached.fetchedAt < minMs;
+  if (force) {
+    // 在途请求本身就是一次真实上游拉取:强制刷新搭车即可,不另起一次
+    if (inflight) return inflight;
+    // 连点刷新:节流窗口内直接给缓存;没有缓存时才放行一次真实请求
+    if (cached && now - lastForceAt < FORCE_MIN_INTERVAL_MS) {
+      return { ...cached.payload, cached: true, throttled: true };
+    }
+    lastForceAt = now;
+  } else if (fresh) {
+    return { ...cached.payload, cached: true };
+  }
+  if (!inflight) {
+    inflight = refresh(ctx, config).finally(() => {
+      inflight = null;
+    });
+  }
+  return inflight;
+}
+
+/** 只接受 ?force=1(而非子串匹配,`?force=10` 不再误命中)。 */
+function wantsForce(request) {
+  try {
+    const url = new URL(String(request?.url ?? "/api/glm-quota"), "http://localhost");
+    return url.searchParams.get("force") === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** 从 npmrc 文本里取最后一次 registry 配置。 */
+function registryFromNpmrc(file) {
+  try {
+    let found = "";
+    for (const line of fsSync.readFileSync(file, "utf8").split(/\r?\n/)) {
+      const match = line.match(/^\s*registry\s*=\s*(\S+)\s*$/i);
+      if (match) found = match[1];
+    }
+    return found.trim();
+  } catch {
+    return "";
+  }
+}
+
+/** 版本查询用的 registry:config.registry → 环境变量 → profile/.npmrc → ~/.npmrc → 官方 registry。
+ *  与 pnpm 安装同源,避免"镜像滞后 → 显示可更新 → 更新 → 版本没变 → 又显示可更新"的回环。 */
+function registryBase(config) {
+  const explicit = typeof config?.registry === "string" ? config.registry.trim() : "";
+  if (explicit) return explicit.replace(/\/+$/, "");
+  const fromEnv = String(process.env.npm_config_registry || process.env.NPM_CONFIG_REGISTRY || "").trim();
+  if (fromEnv) return fromEnv.replace(/\/+$/, "");
+  const files = [path.join(os.homedir(), ".npmrc")];
+  try {
+    files.push(path.join(profileDir(), ".npmrc"));
+  } catch { /* no profile dir: user-level only */ }
+  let found = "";
+  for (const file of files) {
+    const value = registryFromNpmrc(file);
+    if (value) found = value; // profile 级覆盖用户级
+  }
+  return (found || DEFAULT_REGISTRY).replace(/\/+$/, "");
+}
+
+function parseVersionOutput(stdout) {
+  const text = String(stdout ?? "").trim();
+  if (!text) return null;
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed === "string" && parsed.trim()) return parsed.trim();
+    if (Array.isArray(parsed) && typeof parsed[0] === "string") return parsed[0];
+    if (parsed && typeof parsed.version === "string") return parsed.version;
+  } catch { /* not JSON: fall through to a lenient match */ }
+  const match = text.match(/\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?/);
+  return match ? match[0] : null;
+}
+
+/** 用 pnpm 查最新版:与安装共用 registry/代理/鉴权配置。 */
+async function latestViaPnpm() {
+  let cwd;
+  try {
+    cwd = profileDir();
+  } catch {
+    cwd = os.homedir();
+  }
+  for (const candidate of pnpmCandidates()) {
+    const [cmd, ...rest] = candidate;
+    const args = rest.filter((a) => typeof a === "string");
+    const opts = { cwd, timeout: VERSION_TIMEOUT_MS, windowsHide: true, ...rest.find((a) => a && typeof a === "object") };
+    try {
+      const { stdout } = await run(cmd, [...args, "view", NPM_PACKAGE, "version", "--json"], opts);
+      const version = parseVersionOutput(stdout);
+      if (version) return version;
+    } catch { /* try next candidate */ }
+  }
+  return null;
+}
+
+/** 回退路径:直接问 registry(HTTP 代理环境可能不可达,故只作兜底)。 */
+async function latestViaRegistry(base) {
+  const res = await fetch(`${base}/${NPM_PACKAGE}/latest`, {
+    headers: { accept: "application/json" },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
+  if (!res.ok) throw fail(`registry HTTP ${res.status}`);
+  const json = await res.json().catch(() => null);
+  const version = json && typeof json.version === "string" ? json.version.trim() : "";
+  if (!version) throw fail("registry response has no version field");
+  return version;
+}
+
+async function latestVersion(config) {
+  if (versionCache && Date.now() - versionCache.at < VERSION_CACHE_MS) {
+    return { ...versionCache.value, cached: true };
+  }
+  let version = null;
+  let source = "none";
+  let failure = null;
+  const viaPnpm = await latestViaPnpm();
+  if (viaPnpm) {
+    version = viaPnpm;
+    source = "pnpm";
+  } else {
+    const base = registryBase(config);
+    try {
+      version = await latestViaRegistry(base);
+      source = base;
+    } catch (error) {
+      failure = errorMessage(error);
+    }
+  }
+  if (!version) {
+    // 失败不缓存:网络恢复后下一次询问立刻重试
+    return { ok: false, error: failure || "version lookup failed" };
+  }
+  const value = { ok: true, version, source };
+  versionCache = { at: Date.now(), value };
+  return value;
+}
+
+function json(payload, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+  });
+}
+
 function pnpmCandidates() {
   const list = [];
   if (process.env.PNPM_PATH) list.push([process.execPath, process.env.PNPM_PATH]);
@@ -278,6 +421,8 @@ function pnpmCandidates() {
   return list;
 }
 
+let updateInflight = null;
+
 async function runSelfUpdate() {
   let dir;
   try {
@@ -285,6 +430,7 @@ async function runSelfUpdate() {
   } catch (error) {
     return json({ ok: false, error: String(error.message || error) }, 500);
   }
+  const before = runningVersion();
   const args = ["update", NPM_PACKAGE, "--latest", "--config.minimum-release-age=0"];
   let lastError = "no pnpm candidate worked";
   for (const candidate of pnpmCandidates()) {
@@ -295,10 +441,60 @@ async function runSelfUpdate() {
       await run(cmd, [...cmdArgs, ...args], opts);
       const pkgFile = path.join(dir, "node_modules", NPM_PACKAGE, "package.json");
       const version = JSON.parse(await fs.readFile(pkgFile, "utf8")).version;
-      return json({ ok: true, version });
+      versionCache = null; // 装完后让下一次版本查询重新确认
+      return json({
+        ok: true,
+        version,
+        runningVersion: before,
+        // null = 无法判定(读不到自身版本);客户端此时保持原行为
+        restartRequired: before ? version !== before : null,
+      });
     } catch (error) {
       lastError = String(error?.message || error);
     }
   }
   return json({ ok: false, error: lastError }, 500);
+}
+
+/** Host 插件:注册经过鉴权的 /api/glm-quota* 精确 Fetch 路由。 */
+export function apply(ctx, config) {
+  const connection = ctx.get("connection");
+  if (!connection?.fetch || typeof connection.fetch.register !== "function") {
+    throw fail("connection service is unavailable; cannot serve /api/glm-quota");
+  }
+  const dispose = connection.fetch.register({
+    path: "/api/glm-quota",
+    methods: ["GET"],
+    requestBody: "buffered",
+    fetch: async (request) => {
+      const payload = await getQuota(ctx, config, wantsForce(request));
+      return json(payload);
+    },
+  });
+
+  const disposeVersion = connection.fetch.register({
+    path: "/api/glm-quota/version",
+    methods: ["GET"],
+    requestBody: "buffered",
+    fetch: async () => json(await latestVersion(config)),
+  });
+
+  // 自更新:POST /api/glm-quota/update 在 profile 目录执行 pnpm 升级本包,
+  // 返回安装到的新版本与运行中版本。前端资源刷新页面即可生效;Host 半部的
+  // 变更仍需重启 DSH(由 restartRequired 告知客户端)。pnpm 解析顺序:
+  // 环境变量 → DSH 桌面运行时内置 → PATH。
+  const disposeUpdate = connection.fetch.register({
+    path: "/api/glm-quota/update",
+    methods: ["POST"],
+    requestBody: "buffered",
+    fetch: async () => {
+      if (config?.enableSelfUpdate === false) {
+        return json({ ok: false, error: "self-update disabled by config (enableSelfUpdate: false)" }, 403);
+      }
+      if (updateInflight) return json({ ok: false, error: "update already in progress" }, 409);
+      updateInflight = runSelfUpdate().finally(() => { updateInflight = null; });
+      return updateInflight;
+    },
+  });
+  return [dispose, disposeVersion, disposeUpdate];
 }

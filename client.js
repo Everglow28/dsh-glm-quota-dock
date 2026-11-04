@@ -17,13 +17,23 @@ window.__ModuleLoader__.load({
     const IDLE_AFTER_MS = 5 * 60_000;  // no key/pointer/wheel input for 5 min → idle
     const IDLE_POLL_MS = 5 * 60_000;   // idle re-poll cadence
 
-    // This plugin's own version (kept in sync with package.json by hand; the
-    // client bundle cannot read package.json at runtime). Shown as muted "v"
-    // text in the panel footer — deliberately unlike the plan-tier badge.
+    // This bundle's own version (the page/Client half; still hand-synced with
+    // package.json because a browser bundle cannot read it at runtime). The Host
+    // now reports ITS loaded version via payload.client.version, so a forgotten
+    // bump shows up as a visible "host restart pending / page outdated" footer
+    // hint instead of a silently wrong number.
     const PLUGIN_VERSION = '1.3.2';
-    const NPM_PACKAGE = 'dsh-glm-quota-dock';
-    const UPDATE_CHECK_MS = 60 * 60_000; // re-check npm for a newer release hourly
+    const UPDATE_CHECK_MS = 60 * 60_000; // re-check the Host for a newer release hourly
     let updateCheck = { at: 0, latest: null }; // module-level: shared across mounts
+
+    // Module-level locale broadcast: apply() subscribes to the ctx `locale/change`
+    // event and components follow through a hook, so an in-session language switch
+    // also updates the Intl number formatting without re-registering the slot.
+    const localeHub = { id: 'en', listeners: new Set() };
+    const localeOf = (snapshot) => {
+      const active = snapshot && typeof snapshot === 'object' ? String(snapshot.active || '') : String(snapshot || '');
+      return active.toLowerCase().startsWith('zh') ? 'zh' : 'en';
+    };
 
     const DICTS = {
       zh: {
@@ -60,6 +70,14 @@ window.__ModuleLoader__.load({
         planDescV1: '历史版本 V1:5 小时滚动 Token 窗口 + 月度工具调用额度',
         planDescV2: '历史版本 V2:Token 窗口制,含每周窗口',
         planDescCredit: '新版积分套餐:按 Token 消耗积分抵扣',
+        segCredit: '积分',
+        segQuota: '额度',
+        restartHint: '宿主待重启',
+        restartTitle: 'Host 半部已更新,重启 DSH 后才会生效',
+        pageStaleHint: '页面待刷新',
+        pageStaleTitle: 'Host 半部已是新版本,刷新页面即可同步',
+        alreadyLatest: '已是最新',
+        updateRestart: '已更新,请重启 DSH',
       },
       en: {
         tokensBase: 'Token quota',
@@ -95,6 +113,14 @@ window.__ModuleLoader__.load({
         planDescV1: 'Legacy V1: 5-hour rolling token window + monthly tool quota',
         planDescV2: 'Legacy V2: token windows including a weekly window',
         planDescCredit: 'New credit plan: token usage draws credits',
+        segCredit: 'Credit',
+        segQuota: 'Quota',
+        restartHint: 'restart DSH',
+        restartTitle: 'Host half updated — restart DSH to apply',
+        pageStaleHint: 'page outdated',
+        pageStaleTitle: 'Host half is newer — refresh the page',
+        alreadyLatest: 'Up to date',
+        updateRestart: 'Updated — restart DSH',
       },
     };
 
@@ -106,18 +132,21 @@ window.__ModuleLoader__.load({
       ".glmq-mark{display:inline-flex;align-items:center;color:var(--dsw-alias-brand-primary)}",
       ".glmq-mark svg{display:block}",
       ".glmq-pct{color:var(--glmq-state,var(--dsw-alias-label-secondary));font-weight:600}",
-      ".glmq-panel{position:absolute;bottom:calc(100% + 10px);left:50%;transform:translateX(-50%);z-index:30;width:360px;box-sizing:border-box;background:var(--dsw-alias-bg-overlay);border:0.5px solid var(--dsw-alias-border-l1);border-radius:14px;box-shadow:0 4px 16px rgba(0,0,0,.10),0 12px 40px rgba(0,0,0,.12);padding:14px;display:flex;flex-direction:column;gap:12px;text-align:left}",
+      ".glmq-panel{position:absolute;bottom:calc(100% + 10px);left:50%;transform:translateX(-50%);z-index:30;width:360px;max-width:calc(100vw - 24px);max-height:calc(100vh - 180px);overflow:auto;overscroll-behavior:contain;box-sizing:border-box;background:var(--dsw-alias-bg-overlay);border:0.5px solid var(--dsw-alias-border-l1);border-radius:14px;box-shadow:0 4px 16px rgba(0,0,0,.10),0 12px 40px rgba(0,0,0,.12);padding:14px;display:flex;flex-direction:column;gap:12px;text-align:left}",
       ".glmq-panel-head{display:flex;align-items:center;gap:7px;color:var(--dsw-alias-label-primary);font-size:12.5px;font-weight:600}",
       ".glmq-panel-head svg{flex:none;width:15px;height:15px;color:#0b7fff}",
       ".glmq-refresh{margin-left:auto;border:none;background:0 0;color:var(--dsw-alias-label-tertiary);cursor:pointer;padding:2px;border-radius:6px;display:inline-flex}",
       ".glmq-refresh:hover{color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover)}",
+      ".glmq-refresh:disabled{opacity:.45;cursor:default;background:0 0}",
+      ".glmq-refresh-busy svg{animation:glmq-spin .9s linear infinite}",
+      "@keyframes glmq-spin{to{transform:rotate(360deg)}}",
       ".glmq-refresh svg{width:13px;height:13px}",
       ".glmq-extlink{margin-left:auto;border:none;background:0 0;color:var(--dsw-alias-label-tertiary);cursor:pointer;padding:2px;border-radius:6px;display:inline-flex;text-decoration:none}",
       ".glmq-extlink:hover{color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover)}",
       ".glmq-extlink svg{width:13px;height:13px}",
       ".glmq-spacer{flex:1}",
       ".glmq-plan-tag{cursor:help;position:relative;font-size:10px;font-weight:600;color:#0b7fff;background:color-mix(in srgb,#0b7fff 10%,transparent);border-radius:999px;padding:1px 7px;letter-spacing:.02em;font-weight:600}",
-      ".glmq-plan-tag::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%) translateY(2px);width:max-content;max-width:224px;box-sizing:border-box;background:var(--dsw-alias-bg-overlay);color:var(--dsw-alias-label-secondary);border:0.5px solid var(--dsw-alias-border-l1);border-radius:9px;box-shadow:0 4px 16px rgba(0,0,0,.10),0 12px 40px rgba(0,0,0,.12);padding:8px 10px;font-size:11px;font-weight:400;line-height:1.65;text-align:left;letter-spacing:normal;white-space:normal;opacity:0;pointer-events:none;transition:opacity .15s ease,transform .15s ease;z-index:40}",
+      ".glmq-plan-tag::after{content:attr(data-tip);position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%) translateY(-2px);width:max-content;max-width:224px;box-sizing:border-box;background:var(--dsw-alias-bg-overlay);color:var(--dsw-alias-label-secondary);border:0.5px solid var(--dsw-alias-border-l1);border-radius:9px;box-shadow:0 4px 16px rgba(0,0,0,.10),0 12px 40px rgba(0,0,0,.12);padding:8px 10px;font-size:11px;font-weight:400;line-height:1.65;text-align:left;letter-spacing:normal;white-space:normal;opacity:0;pointer-events:none;transition:opacity .15s ease,transform .15s ease;z-index:40}",
       ".glmq-plan-tag:hover::after{opacity:1;transform:translateX(-50%) translateY(0)}",
       ".glmq-cards{display:grid;grid-template-columns:1fr 1fr;gap:8px}",
       ".glmq-limit-row{display:flex;align-items:baseline;gap:6px;font-size:12px;color:var(--dsw-alias-label-secondary)}",
@@ -137,6 +166,7 @@ window.__ModuleLoader__.load({
       ".glmq-panel-foot{display:flex;align-items:center;gap:6px;white-space:nowrap;border-top:0.5px solid var(--dsw-alias-border-l1);padding-top:10px;font-size:10.5px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums}",
       ".glmq-panel-foot>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis}",
       ".glmq-ver{flex:none;color:var(--dsw-alias-label-tertiary)}",
+      ".glmq-ver-stale{flex:none;color:var(--dsw-alias-state-warn-primary);cursor:help}",
       ".glmq-upd{flex:none;border:none;background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 12%,transparent);padding:1px 8px;border-radius:999px;font:inherit;font-size:10px;font-weight:600;color:var(--dsw-alias-state-success-primary);cursor:pointer;text-decoration:none}",
       ".glmq-upd:hover{background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 22%,transparent)}",
       ".glmq-upd-busy{opacity:.6;pointer-events:none}",
@@ -164,7 +194,7 @@ window.__ModuleLoader__.load({
       ".glmq-usage-chev{display:inline-flex;flex:none;width:12px;height:12px;margin-left:auto;align-self:center;color:var(--dsw-alias-label-tertiary);transition:transform .18s ease,color .12s ease}",
       ".glmq-usage-chev svg{display:block;width:12px;height:12px}",
       ".glmq-usage-toggle[aria-expanded=true] .glmq-usage-chev{transform:rotate(180deg)}",
-      "@media (prefers-reduced-motion:reduce){.glmq-bar-fill{transition:none}.glmq-plan-tag::after{transition:none}.glmq-usage-chev{transition:none}}",
+      "@media (prefers-reduced-motion:reduce){.glmq-bar-fill{transition:none}.glmq-plan-tag::after{transition:none}.glmq-usage-chev{transition:none}.glmq-refresh-busy svg{animation:none}}",
     ].join("");
 
     const MARK_ICON = h('svg', { viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true },
@@ -207,9 +237,10 @@ window.__ModuleLoader__.load({
     function limitAccent(limit, type) {
       const unit = Number(limit.unit);
       if (type.includes('TOKEN')) return '#0b7fff';
+      // CREDIT 必须先于 unit===4:积分窗口也可能带周窗口的 unit,否则被染成青色
+      if (type.includes('CREDIT')) return '#f59e0b';
       if (type.includes('TIME') || type.includes('TOOL') || type.includes('MCP')) return '#9e77ed';
       if (unit === 4) return '#14b8a6';
-      if (type.includes('CREDIT')) return '#f59e0b';
       return '#f43f5e';
     }
     function cardColor(pct, limit, type) {
@@ -225,6 +256,28 @@ window.__ModuleLoader__.load({
       } catch {
         return String(n);
       }
+    }
+
+    /** 宽松 semver 解析:x.y.z(缺省补 0)+ 可选预发布标签。 */
+    function parseVersion(value) {
+      const match = String(value == null ? '' : value).trim().replace(/^v/i, '')
+        .match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/);
+      if (!match) return null;
+      return { nums: [Number(match[1] || 0), Number(match[2] || 0), Number(match[3] || 0)], pre: match[4] || '' };
+    }
+
+    /** 版本比较:-1 / 0 / 1;预发布 < 同号正式版(不再把 '3-beta' 当 3 处理)。 */
+    function compareVersions(a, b) {
+      const left = parseVersion(a);
+      const right = parseVersion(b);
+      if (!left || !right) return 0;
+      for (let i = 0; i < 3; i += 1) {
+        if (left.nums[i] !== right.nums[i]) return left.nums[i] > right.nums[i] ? 1 : -1;
+      }
+      if (left.pre === right.pre) return 0;
+      if (!left.pre) return 1;
+      if (!right.pre) return -1;
+      return left.pre > right.pre ? 1 : -1;
     }
 
     function resetInfo(nextResetTime, t) {
@@ -268,8 +321,10 @@ window.__ModuleLoader__.load({
 
     function useQuotaPoll(enabled) {
       const [state, setState] = React.useState({ phase: 'loading' });
+      const [busy, setBusy] = React.useState(false);
       const [, setBump] = React.useState(0);
       const tickRef = React.useRef(null);
+      const busyRef = React.useRef(false);
       const enabledRef = React.useRef(enabled);
       // Host 下发的轮询参数(payload.client);未到达前用本地默认值
       const remoteRef = React.useRef(null);
@@ -286,19 +341,24 @@ window.__ModuleLoader__.load({
           if (!enabledRef.current) return;
           lastFetchAt = Date.now();
           try {
-            const res = await fetch('/api/glm-quota' + (force ? '?force=1' : ''), { headers: { accept: 'application/json' } });
+            const res = await fetch('/api/glm-quota' + (force ? '?force=1' : ''), {
+              headers: { accept: 'application/json' },
+              // 防止 Host/网络卡死时请求永久挂起(AbortSignal.timeout 在旧内核上不存在)
+              signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(30_000) : undefined,
+            });
             if (!res.ok) throw new Error('HTTP ' + res.status);
             const json = await res.json();
             if (alive) {
               if (json.client && typeof json.client === 'object') remoteRef.current = json.client;
               applyInterval();
-              setState(json.ok ? { phase: 'ok', ...json } : { phase: 'error', error: json.error || 'upstream error' });
+              // 错误态也保留 Host 下发的 client 参数(轮询周期/版本不变),但不再带 configured
+              // 字段,保持"未配置时显示 GLM ! 并悬停看原因"的既有行为
+              setState(json.ok ? { phase: 'ok', ...json } : { phase: 'error', error: json.error || 'upstream error', client: json.client, fetchedAt: json.fetchedAt, stale: json.stale, lastError: json.lastError });
             }
           } catch (error) {
             if (alive) setState({ phase: 'error', error: String(error) });
           }
         };
-        tickRef.current = tick;
         // Host 下发的 pollMs 与本地不同时重建 interval
         const applyInterval = () => {
           const desired = Number(remoteRef.current?.pollMs);
@@ -339,7 +399,18 @@ window.__ModuleLoader__.load({
           document.removeEventListener('visibilitychange', onVisible);
         };
       }, [enabled]);
-      return [state, (force) => { if (tickRef.current) tickRef.current(force); }];
+      // 手动刷新期间置 busy:按钮禁用并转圈,连点不再连发 force 请求
+      const refresh = (force) => {
+        if (busyRef.current || !tickRef.current) return;
+        busyRef.current = true;
+        setBusy(true);
+        const done = () => {
+          busyRef.current = false;
+          setBusy(false);
+        };
+        Promise.resolve(tickRef.current(force)).then(done, done);
+      };
+      return [state, refresh, busy];
     }
 
     /**
@@ -400,7 +471,19 @@ window.__ModuleLoader__.load({
       return desc;
     }
 
-    function QuotaWidget({ t, loc, useProjection }) {
+    /** Follow the active locale through the module-level hub (see localeHub). */
+    function useLocaleId(fallback) {
+      const [id, setId] = React.useState(localeHub.id || fallback || 'en');
+      React.useEffect(() => {
+        localeHub.listeners.add(setId);
+        setId(localeHub.id || fallback || 'en');
+        return () => { localeHub.listeners.delete(setId); };
+      }, [fallback]);
+      return id;
+    }
+
+    function QuotaWidget({ t, loc: locProp, useProjection }) {
+      const loc = useLocaleId(locProp);
       // Show only when the session routes through a GLM Coding Plan provider
       // (a coding endpoint whose usage draws on the plan quota) with a glm-*
       // model. Plain-API glm routes bill the prepaid balance and never touch
@@ -420,7 +503,7 @@ window.__ModuleLoader__.load({
       const isCodingPlanRoute = providerId.includes("coding") || providerId.includes("zai-coding");
       const isGlmModel = modelId.startsWith("glm");
       const isGlmSession = !!selectionNow && isCodingPlanRoute && isGlmModel;
-      const [state, refresh] = useQuotaPoll(isGlmSession);
+      const [state, refresh, refreshBusy] = useQuotaPoll(isGlmSession);
       const [open, setOpen] = React.useState(false);
       // 24h usage card starts collapsed (chart/model body unmounted); the
       // choice lives for the page session only, every fresh load collapses again
@@ -430,15 +513,21 @@ window.__ModuleLoader__.load({
       // shared module cache; cooldown is set only on SUCCESS so an offline
       // session retries on the next mount instead of white-waiting an hour
       const [latestVer, setLatestVer] = React.useState(updateCheck.latest);
-      const clientCfg = state.phase === 'ok' && state.client && typeof state.client === 'object' ? state.client : null;
+      const clientCfg = state.client && typeof state.client === 'object' ? state.client : null;
+      // primitive dep: a fresh payload object every poll must not tear the effect down
+      const updateCheckMs = Number(clientCfg?.updateCheckMs) || UPDATE_CHECK_MS;
       React.useEffect(() => {
         let alive = true;
-        const interval = Number(clientCfg?.updateCheckMs) || UPDATE_CHECK_MS;
-        if (Date.now() - updateCheck.at < interval) return undefined;
-        fetch('https://registry.npmjs.org/' + NPM_PACKAGE + '/latest', { headers: { accept: 'application/json' } })
+        if (Date.now() - updateCheck.at < updateCheckMs) return undefined;
+        // 版本查询走 Host:与 pnpm 安装同源(镜像/代理/鉴权一致),浏览器不再直连 registry
+        fetch('/api/glm-quota/version', {
+          headers: { accept: 'application/json' },
+          // Host 侧可能要起一次 pnpm 查询(最长 ~20s),给它留足时间但不无限等待
+          signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(45_000) : undefined,
+        })
           .then((res) => (res.ok ? res.json() : null))
           .then((json) => {
-            const v = json && typeof json.version === 'string' ? json.version : null;
+            const v = json && json.ok && typeof json.version === 'string' ? json.version : null;
             if (alive && v) {
               updateCheck.at = Date.now(); // success only: failures retry next mount
               updateCheck.latest = v;
@@ -447,21 +536,15 @@ window.__ModuleLoader__.load({
           })
           .catch(() => { /* offline / blocked: footer stays version-only */ });
         return () => { alive = false; };
-      }, [clientCfg]);
-      // numeric x.y.z compare; pre-release tags ('-beta') are truncated by
-      // parseInt and therefore compared as their leading numbers — fine for
-      // this plugin's plain-number releases, don't ship tagged versions
-      const isNewer = (candidate, current) => {
-        const a = String(candidate).split('.').map((n) => parseInt(n, 10));
-        const b = String(current).split('.').map((n) => parseInt(n, 10));
-        for (let i = 0; i < 3; i += 1) {
-          if ((a[i] || 0) > (b[i] || 0)) return true;
-          if ((a[i] || 0) < (b[i] || 0)) return false;
-        }
-        return false;
-      };
+      }, [updateCheckMs]);
       const selfUpdateEnabled = clientCfg ? clientCfg.enableSelfUpdate !== false : true;
-      const hasUpdate = selfUpdateEnabled && latestVer && isNewer(latestVer, PLUGIN_VERSION);
+      const hasUpdate = selfUpdateEnabled && latestVer && compareVersions(latestVer, PLUGIN_VERSION) > 0;
+      // Host 半部版本由 Host 下发:与页面(Client 半部)不一致时明确提示——
+      // host 旧 = 自更新后还没重启 DSH;页面旧 = 只重启了 DSH 没刷新页面
+      const hostVersion = clientCfg && typeof clientCfg.version === 'string' && clientCfg.version ? clientCfg.version : null;
+      const versionSkew = hostVersion ? compareVersions(hostVersion, PLUGIN_VERSION) : 0;
+      const pendingRestart = versionSkew < 0;
+      const pendingRefresh = versionSkew > 0;
       const [updatePhase, setUpdatePhase] = React.useState('idle');
       const [confirmOpen, setConfirmOpen] = React.useState(false);
       const updWrapRef = React.useRef(null);
@@ -479,17 +562,25 @@ window.__ModuleLoader__.load({
         };
       }, [confirmOpen]);
       const startUpdate = () => {
-        if (updatePhase === 'running' || updatePhase === 'done') return;
+        if (updatePhase === 'running' || updatePhase === 'done' || updatePhase === 'restart' || updatePhase === 'current') return;
         setUpdatePhase('running');
         fetch('/api/glm-quota/update', { method: 'POST' })
           .then((res) => res.json())
           .then((json) => {
-            if (json && json.ok) {
-              setUpdatePhase('done');
-              setTimeout(() => window.location.reload(), 1500);
-            } else {
+            if (!json || !json.ok) {
               setUpdatePhase('failed');
+              return;
             }
+            if (json.version && json.version === PLUGIN_VERSION && json.restartRequired !== true) {
+              // 装到的就是当前运行版本:没有变化,提示"已是最新"而不是盲目刷新
+              updateCheck.latest = json.version;
+              setLatestVer(json.version);
+              setUpdatePhase('current');
+              return;
+            }
+            // Host 半部文件已换新,但进程里还是旧代码:重启后才生效,先刷新页面加载新 Client 半部
+            setUpdatePhase(json.restartRequired === true ? 'restart' : 'done');
+            setTimeout(() => window.location.reload(), 1500);
           })
           .catch(() => setUpdatePhase('failed'));
       };
@@ -521,11 +612,20 @@ window.__ModuleLoader__.load({
           // API's response order (reference screenshots put it top-left)
           .sort((a, b) => (Number(b.unit) === 3 && typeOf(b).includes('TOKEN') ? 1 : 0) - (Number(a.unit) === 3 && typeOf(a).includes('TOKEN') ? 1 : 0))
         : [];
+      const isCredit = (limit) => typeOf(limit).includes('CREDIT');
+      // 段落顺序即展示顺序:5h token → 周 → 工具 → 积分。积分窗口也可能带 unit 4,
+      // 周段落必须排除 CREDIT,否则同一张卡会顶着"周"的名字重复出现;
+      // 最多三段,避免窄输入框里 pill 溢出。
       const segments = [
         { key: 'tokens', label: t('seg5h'), limit: limits.find((limit) => typeOf(limit).includes('TOKEN') && Number(limit.unit) === 3) },
-        { key: 'week', label: t('segWeek'), limit: limits.find((limit) => Number(limit.unit) === 4) },
+        { key: 'week', label: t('segWeek'), limit: limits.find((limit) => Number(limit.unit) === 4 && !isCredit(limit)) },
         { key: 'tools', label: t('segTool'), limit: limits.find((limit) => { const ty = typeOf(limit); return ty.includes('TIME') || ty.includes('TOOL') || ty.includes('MCP'); }) },
-      ].filter((seg) => seg.limit !== undefined);
+        { key: 'credit', label: t('segCredit'), limit: limits.find(isCredit) },
+      ].filter((seg) => seg.limit !== undefined).slice(0, 3);
+      // 未知窗口类型也上 pill:取第一张卡兜底,不再退化成「GLM ·」
+      if (segments.length === 0 && limits.length > 0) {
+        segments.push({ key: 'primary', label: t('segQuota'), limit: limits[0] });
+      }
 
       let pillContent;
       if (state.phase === 'loading') pillContent = t('loading');
@@ -569,6 +669,7 @@ window.__ModuleLoader__.load({
         h('button', {
           className: 'glmq-pill',
           'aria-expanded': open,
+          'aria-haspopup': 'dialog',
           title: selectionNow ? `GLM Coding Plan · model: ${selectionNow.model} (${selectionNow.provider})` : 'GLM Coding Plan',
           onClick: () => setOpen((value) => !value),
         }, h('span', { className: 'glmq-mark' }, MARK_ICON), pillContent),
@@ -595,14 +696,21 @@ window.__ModuleLoader__.load({
               title: t('usagePage'),
               'aria-label': t('usagePage'),
             }, EXTLINK_ICON),
-            h('button', { className: 'glmq-refresh', title: t('refresh'), 'aria-label': t('refresh'), onClick: () => refresh(true) }, REFRESH_ICON)),
+            h('button', {
+              className: 'glmq-refresh' + (refreshBusy ? ' glmq-refresh-busy' : ''),
+              title: t('refresh'),
+              'aria-label': t('refresh'),
+              'aria-busy': refreshBusy,
+              disabled: refreshBusy,
+              onClick: () => refresh(true),
+            }, REFRESH_ICON)),
           limits.length > 0
             ? h('div', { className: 'glmq-cards' }, limits.map((limit) => h(LimitRow, {
               key: limit.type, limit, t,
               // the 5h token window is the primary (countdown) card
               isPrimary: typeOf(limit).includes('TOKEN') && Number(limit.unit) === 3,
             })))
-            : h('div', { className: 'glmq-meta' }, state.phase === 'error' ? t('error') : t('loading')),
+            : h('div', { className: 'glmq-meta', role: 'status', 'aria-live': 'polite' }, state.phase === 'error' ? t('error') : t('loading')),
           (() => {
             const mu = state.modelUsage;
             const total = mu && mu.totalUsage;
@@ -657,9 +765,15 @@ window.__ModuleLoader__.load({
             ? (() => {
               const cached = `${state.stale ? t('stale') + ' · ' : ''}${t('cachedPrefix')} ${new Date(state.fetchedAt).toLocaleTimeString()}`;
               return h('div', { className: 'glmq-panel-foot' },
-                h('span', null, cached),
+                // stale 时把 Host 带回来的 lastError 挂到 title 上:看得见"过期",也查得到原因
+                h('span', { title: state.lastError ? String(state.lastError) : (state.modelUsageError ? String(state.modelUsageError) : undefined) }, cached),
                 h('span', { className: 'glmq-spacer' }),
-                hasUpdate
+                pendingRestart
+                  ? h('span', { key: 'restart', className: 'glmq-ver-stale', title: t('restartTitle') }, t('restartHint'))
+                  : pendingRefresh
+                    ? h('span', { key: 'refresh', className: 'glmq-ver-stale', title: t('pageStaleTitle') }, t('pageStaleHint'))
+                    : null,
+                (hasUpdate || updatePhase === 'current')
                   ? h('span', { key: 'upd', className: 'glmq-upd-wrap', ref: updWrapRef },
                     h('button', {
                       className: 'glmq-upd' + (updatePhase === 'running' ? ' glmq-upd-busy' : '') + (updatePhase === 'failed' ? ' glmq-upd-fail' : ''),
@@ -668,10 +782,12 @@ window.__ModuleLoader__.load({
                         : `v${PLUGIN_VERSION} → v${latestVer}`,
                       onClick: () => { if (updatePhase === 'idle' || updatePhase === 'failed') setConfirmOpen(true); },
                     }, updatePhase === 'running' ? t('updating')
+                      : updatePhase === 'restart' ? t('updateRestart')
+                      : updatePhase === 'current' ? t('alreadyLatest')
                       : updatePhase === 'done' ? t('updateDone')
                       : updatePhase === 'failed' ? t('updateFailed')
                       : t('newVersion')),
-                    confirmOpen && updatePhase !== 'running' && updatePhase !== 'done'
+                    confirmOpen && updatePhase !== 'running' && updatePhase !== 'done' && updatePhase !== 'restart' && updatePhase !== 'current'
                       ? h('div', { className: 'glmq-confirm', role: 'dialog', 'aria-label': t('confirmUpdate') },
                         h('div', { className: 'glmq-confirm-text' },
                           String(t('confirmUpdate') || 'Update to {v}?').replace('{v}', 'v' + latestVer)),
@@ -690,16 +806,31 @@ window.__ModuleLoader__.load({
       apply(ctx) {
         const locale = ctx.get('locale');
         let t = (key) => (DICTS.zh[key] ?? DICTS.en[key] ?? key);
-        let loc = 'en';
         if (locale && typeof locale.register === 'function') {
           locale.register(NS, { zh: DICTS.zh, en: DICTS.en });
           if (typeof locale.bind === 'function') t = locale.bind(NS);
           try {
             const snapshot = typeof locale.getLocale === 'function' ? locale.getLocale() : null;
-            if (snapshot && snapshot.active) loc = String(snapshot.active).startsWith('zh') ? 'zh' : 'en';
+            localeHub.id = localeOf(snapshot);
           } catch {
-            /* keep 'en' */
+            /* keep the hub default ('en') */
           }
+        }
+        // 跟随会话内语言切换:文案由 locale.bind 实时读,t 之外的 Intl 数字格式靠这条广播
+        if (typeof ctx.on === 'function') {
+          const disposeLocale = ctx.on('locale/change', (snapshot) => {
+            const next = localeOf(snapshot);
+            if (next === localeHub.id) return;
+            localeHub.id = next;
+            for (const listener of Array.from(localeHub.listeners)) {
+              try {
+                listener(next);
+              } catch {
+                /* one bad listener must not block the rest */
+              }
+            }
+          });
+          if (typeof disposeLocale === 'function') ctx.effect(() => disposeLocale, 'glm-quota-dock: locale');
         }
 
         const style = document.createElement('style');
@@ -712,7 +843,7 @@ window.__ModuleLoader__.load({
           name: 'conversation.composer.dock',
           id: 'glm-quota',
           order: 1,
-        }, (props) => h(QuotaWidget, { ...props, t, loc })));
+        }, (props) => h(QuotaWidget, { ...props, t, loc: localeHub.id })));
       },
     };
   },

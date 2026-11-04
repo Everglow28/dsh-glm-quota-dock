@@ -2,3 +2,5 @@ node_modules/
 *.log
 .DS_Store
 docs/RELEASE.md
+# 本地工作文档,不入库(docs/local/ 整目录忽略)
+/docs/local/
