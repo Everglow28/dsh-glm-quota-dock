@@ -316,7 +316,9 @@ window.__ModuleLoader__.load({
       else if (type.includes('TIME') || type.includes('TOOL') || type.includes('MCP')) base = t('toolsBase');
       else base = limit.type;
       const n = Number(limit.number);
-      const unitWord = { 1: t('unitDay'), 2: t('unitDay'), 3: t('unitHour'), 4: t('unitWeek'), 5: t('unitMonth'), 6: t('unitMonth') }[Number(limit.unit)];
+      // unit 6(团队版 CREDIT 限额)的窗口语义随套餐档位变化(观察到月/滚动周两种),
+      // 不做硬编码:unitWord 查不到时 win 为 null,卡片标题回落为基础词「积分」。
+      const unitWord = { 1: t('unitDay'), 2: t('unitDay'), 3: t('unitHour'), 4: t('unitWeek'), 5: t('unitMonth') }[Number(limit.unit)];
       const win = unitWord && Number.isFinite(n) && n > 0 ? `${n > 1 ? n : ''}${unitWord}` : null;
       return { label: win ? `${base} · ${win}` : base, base, win };
     }
