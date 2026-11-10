@@ -92,7 +92,60 @@ dsh plugin --profile <你的profile> add <克隆目录的绝对路径>
 | `minIntervalSec` | `60` | 上游最小请求间隔(秒),下限 30 |
 | `apiKeyRef` | `ZAI_CODING_CN_API_KEY` | 凭据引用名(与模型页写入的引用一致) |
 | `apiKey` | 无 | 直接内联 key(不推荐,优先用凭据引用) |
+| `organizationId` | 无 | 团队版 Coding Plan 的组织 ID(`org-` 开头);与 `projectId` 同时配置即启用团队模式 |
+| `projectId` | 无 | 团队版 Coding Plan 的项目 ID(`proj_` 开头) |
 | `registry` | 读 npm 配置,缺省 `https://registry.npmjs.org` | 「可更新」检查用的 registry,应指向与 pnpm 安装一致的源 |
+
+### 团队版 Coding Plan
+
+公司团队版(组织维度)的 key 与个人版行为不同:监控接口默认按**个人套餐**解析,
+团队版 key 直接查询会返回 `{"code":500,"msg":"当前用户不存在coding plan"}`。
+此时需同时配置 `organizationId` + `projectId` 启用团队模式,插件会改用
+`?type=2` 并附带 `Bigmodel-Organization` / `Bigmodel-Project` 请求头查询团队额度。
+
+#### 第一步:获取两个 ID
+
+1. 用浏览器登录 [bigmodel.cn](https://bigmodel.cn) 控制台,进入
+   **团队版 Coding Plan → 用量统计** 页面。
+2. 按 **F12**(macOS:`⌥⌘I`)打开开发者工具,切到 **Network(网络)** 面板。
+3. 刷新页面,在过滤框输入 `quota`,找到 `quota/limit` 请求。
+4. 点开该请求 → **Request Headers(请求标头)**,复制两行的值:
+   - `bigmodel-organization: org-xxxxxxxx...` → `organizationId`
+   - `bigmodel-project: proj_xxxxxxxxx...` → `projectId`
+
+组织/项目切换器里能看到组织与项目的**名称**,但 **ID 目前只在请求头中出现**,
+必须从 DevTools 抄一次。这两个 ID 是固定值,填一次即可,不是敏感凭据;
+但**不要把 API key 或控制台登录 token 提交到任何公开仓库**。
+
+#### 第二步:写入配置
+
+编辑 **profile 目录下的 `cordis.patch.yml`**(默认 `~/.dsh/profiles/desktop/cordis.patch.yml`,
+这是你的补丁层,插件的 entry id 为 `glm-quota-dock`),追加一段:
+
+```yaml
+- id: glm-quota-dock
+  config:
+    organizationId: org-xxxxxxxxxxxxxxxx
+    projectId: proj_xxxxxxxxxxxxxxxx
+```
+
+如果文件里已有 `- id: glm-quota-dock` 段(比如之前改过 endpoint 等),把两个
+字段加进已有的 `config` 下即可,不要重复整段。
+
+#### 第三步:重启并验证
+
+1. **重启 DSH**(Host 半部随进程加载,改配置必须重启)。
+2. **刷新网页**(Client 半部)。团队模式下 pill 名称会显示「GLM 团队 / GLM Team」,
+   详情面板出现团队额度卡片(百分比 + 重置时间)。
+3. 如果 pill 报 `GLM !`,悬停可看错误原因;确认两个 ID 复制时没有带多余空格。
+
+#### 已知差异
+
+- 团队版模型用量接口(`model-usage`)对组织维度返回空数据(团队页面用的是另一组
+  统计接口),因此团队模式下 24h 用量卡片可能为空;额度 pill 与额度卡片不受影响。
+- 团队限额的窗口语义(`unit` 字段)随套餐档位变化(观察到「5 小时 + 月度」与
+  「5 小时 + 滚动周」两种组合),插件对无法识别的窗口只显示「积分」基础词,
+  不猜测窗口名;百分比与重置时间始终准确。
 
 ## 工作原理
 
