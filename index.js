@@ -14,6 +14,11 @@
 //   GET {endpoint}/api/monitor/usage/model-usage?startTime=...&endTime=...
 //   Authorization: <裸 key,无 Bearer 前缀>
 //   -> { code: 200, success: true, data: ... }
+//
+// 团队版 Coding Plan(组织/项目维度):监控接口默认查个人套餐,团队版必须
+// 追加 ?type=2 并附带 Bigmodel-Organization / Bigmodel-Project 两个请求头,
+// 否则返回 {"code":500,"msg":"当前用户不存在coding plan"}。配置
+// organizationId + projectId 即启用团队模式(见 README「团队版 Coding Plan」)。
 
 import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
@@ -59,7 +64,7 @@ export const Config = {
       const input = value && typeof value === "object" ? value : {};
       const out = {};
       const issues = [];
-      for (const key of ["endpoint", "apiKey", "apiKeyRef", "registry"]) {
+      for (const key of ["endpoint", "apiKey", "apiKeyRef", "registry", "organizationId", "projectId"]) {
         if (input[key] === undefined || input[key] === null) continue;
         if (typeof input[key] !== "string" || input[key].trim() === "") {
           issues.push({ message: `${key} must be a non-empty string`, path: [key] });
@@ -143,7 +148,7 @@ function usageWindow() {
   return `startTime=${encodeURIComponent(fmt(start))}&endTime=${encodeURIComponent(fmt(end))}`;
 }
 
-async function getJson(url, key) {
+async function getJson(url, key, extraHeaders) {
   let res;
   try {
     res = await fetch(url, {
@@ -151,6 +156,7 @@ async function getJson(url, key) {
         Authorization: key,
         "Accept-Language": "en-US,en",
         accept: "application/json",
+        ...(extraHeaders ?? {}),
       },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
@@ -202,6 +208,26 @@ function clientInfo(config) {
   };
 }
 
+/**
+ * 团队版 Coding Plan 上下文:organizationId + projectId 同时配置即启用。
+ * 团队版监控接口必须带 ?type=2 与 Bigmodel-Organization / Bigmodel-Project
+ * 两个请求头(只给 key 时返回 data:{} 空对象;不传 type 则按个人套餐解析,
+ * 团队版 key 会报「当前用户不存在coding plan」)。
+ */
+function teamContext(config) {
+  const organizationId = typeof config?.organizationId === "string" ? config.organizationId.trim() : "";
+  const projectId = typeof config?.projectId === "string" ? config.projectId.trim() : "";
+  if (organizationId.length === 0 || projectId.length === 0) return null;
+  return {
+    organizationId,
+    projectId,
+    headers: {
+      "Bigmodel-Organization": organizationId,
+      "Bigmodel-Project": projectId,
+    },
+  };
+}
+
 // 拉取并缓存:先解析 key(失败 = 未配置,configured:false);额度主请求失败
 // 则整体失败;model-usage 为辅,失败不阻塞。已有缓存时降级为 stale 数据。
 async function refresh(ctx, config) {
@@ -219,14 +245,20 @@ async function refresh(ctx, config) {
   }
   try {
     const base = endpointBase(config);
+    const team = teamContext(config);
+    const quotaUrl = team ? `${base}${QUOTA_PATH}?type=2` : base + QUOTA_PATH;
+    const usageUrl = team
+      ? `${base}${MODEL_USAGE_PATH}?${usageWindow()}&type=2`
+      : `${base}${MODEL_USAGE_PATH}?${usageWindow()}`;
     const [quotaResult, usageResult] = await Promise.allSettled([
-      getJson(base + QUOTA_PATH, key),
-      getJson(`${base + MODEL_USAGE_PATH}?${usageWindow()}`, key),
+      getJson(quotaUrl, key, team?.headers),
+      getJson(usageUrl, key, team?.headers),
     ]);
     if (quotaResult.status !== "fulfilled") throw quotaResult.reason;
     const payload = {
       ok: true,
       configured: true,
+      planType: team ? "team" : "personal",
       quota: quotaResult.value.data ?? null,
       modelUsage: usageResult.status === "fulfilled" ? usageResult.value.data ?? null : null,
       modelUsageError: usageResult.status === "rejected" ? errorMessage(usageResult.reason) : null,

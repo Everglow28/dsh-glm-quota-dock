@@ -70,6 +70,7 @@ window.__ModuleLoader__.load({
         planDescV1: '历史版本 V1:5 小时滚动 Token 窗口 + 月度工具调用额度',
         planDescV2: '历史版本 V2:Token 窗口制,含每周窗口',
         planDescCredit: '新版积分套餐:按 Token 消耗积分抵扣',
+        teamName: 'GLM 团队',
         segCredit: '积分',
         segQuota: '额度',
         restartHint: '宿主待重启',
@@ -113,6 +114,7 @@ window.__ModuleLoader__.load({
         planDescV1: 'Legacy V1: 5-hour rolling token window + monthly tool quota',
         planDescV2: 'Legacy V2: token windows including a weekly window',
         planDescCredit: 'New credit plan: token usage draws credits',
+        teamName: 'GLM Team',
         segCredit: 'Credit',
         segQuota: 'Quota',
         restartHint: 'restart DSH',
@@ -314,7 +316,7 @@ window.__ModuleLoader__.load({
       else if (type.includes('TIME') || type.includes('TOOL') || type.includes('MCP')) base = t('toolsBase');
       else base = limit.type;
       const n = Number(limit.number);
-      const unitWord = { 1: t('unitDay'), 2: t('unitDay'), 3: t('unitHour'), 4: t('unitWeek'), 5: t('unitMonth') }[Number(limit.unit)];
+      const unitWord = { 1: t('unitDay'), 2: t('unitDay'), 3: t('unitHour'), 4: t('unitWeek'), 5: t('unitMonth'), 6: t('unitMonth') }[Number(limit.unit)];
       const win = unitWord && Number.isFinite(n) && n > 0 ? `${n > 1 ? n : ''}${unitWord}` : null;
       return { label: win ? `${base} · ${win}` : base, base, win };
     }
@@ -627,13 +629,14 @@ window.__ModuleLoader__.load({
         segments.push({ key: 'primary', label: t('segQuota'), limit: limits[0] });
       }
 
+      const planName = state.planType === 'team' ? t('teamName') : 'GLM';
       let pillContent;
       if (state.phase === 'loading') pillContent = t('loading');
       else if (state.phase === 'error') pillContent = h('span', { title: String(state.error || ''), style: { color: 'var(--dsw-alias-state-error-primary)' } }, 'GLM !');
       else if (segments.length === 0) {
         const suffix = state.stale ? '*' : '';
         pillContent = [
-          h('span', { key: 'name' }, 'GLM'),
+          h('span', { key: 'name' }, planName),
           h('span', { key: 'pct', className: 'glmq-pct' }, '·' + suffix),
         ];
       } else {
@@ -645,7 +648,7 @@ window.__ModuleLoader__.load({
         const primaryPct = Math.max(0, Math.min(100, Math.round(Number(primary.limit.percentage) || 0)));
         const primaryReset = resetInfo(primary.limit.nextResetTime, t);
         pillContent = [
-          h('span', { key: 'name' }, 'GLM'),
+          h('span', { key: 'name' }, planName),
           ...segments.map((seg, index) => {
             const pct = Math.max(0, Math.min(100, Math.round(Number(seg.limit.percentage) || 0)));
             const accent = cardColor(pct, seg.limit, typeOf(seg.limit));

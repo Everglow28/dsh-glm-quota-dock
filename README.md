@@ -92,7 +92,26 @@ dsh plugin --profile <你的profile> add <克隆目录的绝对路径>
 | `minIntervalSec` | `60` | 上游最小请求间隔(秒),下限 30 |
 | `apiKeyRef` | `ZAI_CODING_CN_API_KEY` | 凭据引用名(与模型页写入的引用一致) |
 | `apiKey` | 无 | 直接内联 key(不推荐,优先用凭据引用) |
+| `organizationId` | 无 | 团队版 Coding Plan 的组织 ID(`org-` 开头);与 `projectId` 同时配置即启用团队模式 |
+| `projectId` | 无 | 团队版 Coding Plan 的项目 ID(`proj_` 开头) |
 | `registry` | 读 npm 配置,缺省 `https://registry.npmjs.org` | 「可更新」检查用的 registry,应指向与 pnpm 安装一致的源 |
+
+### 团队版 Coding Plan
+
+公司团队版(组织维度)的 key 与个人版行为不同:监控接口默认按**个人套餐**解析,
+团队版 key 直接查询会返回 `{"code":500,"msg":"当前用户不存在coding plan"}`。
+此时需同时配置 `organizationId` + `projectId` 启用团队模式,插件会改用
+`?type=2` 并附带 `Bigmodel-Organization` / `Bigmodel-Project` 请求头查询团队额度。
+
+两个 ID 的获取方式:登录 [bigmodel.cn](https://bigmodel.cn) 控制台 → 进入
+「团队版 Coding Plan → 用量统计」页面 → F12 打开开发者工具 → Network 面板,
+找 `quota/limit` 请求,请求头里的 `bigmodel-organization` 与 `bigmodel-project`
+即为要填的两个值(组织 ID 在组织/项目切换器里也能看到名称,但 ID 目前只在
+请求头中出现)。注意这两个 ID 不是敏感凭据,但**不要把 API key 或登录
+token 提交到任何公开仓库**。
+
+团队版模型用量接口(`model-usage`)对组织维度返回空数据(团队页面用的是另一组
+统计接口),因此团队模式下 24h 用量卡片可能为空,额度 pill 与卡片不受影响。
 
 ## 工作原理
 
